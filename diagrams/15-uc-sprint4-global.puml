@@ -1,0 +1,59 @@
+@startuml
+title Diagramme de Cas d'Utilisation Global — Sprint 4\n(Espace Voyageur)
+
+left to right direction
+skinparam actorStyle awesome
+
+actor "Voyageur\n(Traveler)" as Traveler
+actor "Service\nQR Code" as QR
+
+rectangle "Sprint 4 — Espace Voyageur" {
+
+  package "Création de trajet" {
+    usecase "Définir la route\ndu trajet" as UC_Route
+    usecase "Saisir les détails\ndu vol" as UC_Flight
+    usecase "Définir la capacité\ndisponible" as UC_Capacity
+    usecase "Fixer le tarif\npar kg" as UC_Pricing
+    usecase "Réviser et publier\nle trajet" as UC_Publish
+  }
+
+  package "Gestion des deals" {
+    usecase "Consulter les annonces\nde colis disponibles" as UC_Browse
+    usecase "Voir les détails\nd'un deal" as UC_DealDetail
+    usecase "Accepter un deal" as UC_Accept
+    usecase "Refuser un deal" as UC_Refuse
+  }
+
+  package "Livraison" {
+    usecase "Confirmer la prise\nen charge (scan QR)" as UC_Pickup
+    usecase "Mettre à jour le\nstatut (In Transit)" as UC_Transit
+    usecase "Confirmer la livraison\n(scan QR)" as UC_Deliver
+    usecase "Recevoir le paiement\ndans le wallet" as UC_Payment
+  }
+
+  package "Litige" {
+    usecase "Signaler un\nproblème (litige)" as UC_Dispute
+  }
+}
+
+Traveler --> UC_Route
+Traveler --> UC_Flight
+Traveler --> UC_Capacity
+Traveler --> UC_Pricing
+Traveler --> UC_Publish
+Traveler --> UC_Browse
+Traveler --> UC_DealDetail
+Traveler --> UC_Accept
+Traveler --> UC_Refuse
+Traveler --> UC_Pickup
+Traveler --> UC_Transit
+Traveler --> UC_Deliver
+Traveler --> UC_Dispute
+
+UC_Pickup --> QR
+UC_Deliver --> QR
+UC_Deliver ..> UC_Payment : <<include>>
+UC_DealDetail ..> UC_Accept : <<extend>>
+UC_DealDetail ..> UC_Refuse : <<extend>>
+
+@enduml

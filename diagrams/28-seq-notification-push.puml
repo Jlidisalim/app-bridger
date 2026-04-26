@@ -1,0 +1,67 @@
+@startuml
+title Diagramme de Séquence — Système de Notifications Push
+
+skinparam sequenceArrowThickness 2
+
+actor "Utilisateur" as User
+participant "Application\nMobile" as App
+participant "Backend API\n(Express.js)" as Backend
+database "Base de\nDonnées" as DB
+participant "Expo Push\nNotification\nService" as Expo
+
+== Phase 1 : Enregistrement du token push ==
+
+User -> App : Ouvrir l'application
+App -> App : expo-notifications\ngetExpoPushTokenAsync()
+App -> App : Obtenir le pushToken\n"ExponentPushToken[xxx]"
+App -> Backend : PUT /api/users/push-token\n{ pushToken }
+Backend -> DB : Mettre à jour User\n(pushToken,\npushTokenUpdatedAt)
+Backend --> App : 200 OK
+
+== Phase 2 : Déclenchement d'une notification ==
+
+note over Backend
+  Un événement déclenche une notification :
+  - Nouveau message reçu
+  - Deal accepté / Deal complété
+  - Paiement reçu
+  - Nouveau litige
+  - Rappel de livraison
+end note
+
+Backend -> DB : Créer Notification\n(userId, title, body,\ntype, data, read=false)
+
+Backend -> DB : Récupérer le pushToken\nde l'utilisateur cible
+
+alt pushToken existe
+  Backend -> Expo : POST https://exp.host/--/api/v2/push/send\n[{\n  to: "ExponentPushToken[xxx]",\n  title: "Deal accepté !",\n  body: "Votre colis a été\naccepté par Ahmed",\n  data: { dealId, type }\n}]
+
+  Expo -> Expo : Router vers\nAPNs (iOS) ou\nFCM (Android)
+
+  Expo --> Backend : { status: "ok" }
+
+  alt App en arrière-plan
+    Expo --> App : Notification push\n(bannière système)
+    App --> User : Bannière de notification\nsur l'écran du téléphone
+  else App en premier plan
+    App -> App : Intercepter la notification\n(expo-notifications handler)
+    App --> User : Afficher notification\nin-app (toast/badge)
+  end
+else Pas de pushToken
+  Backend -> Backend : Log warning\n"No push token for user"
+end
+
+== Phase 3 : Consultation des notifications ==
+
+User -> App : Ouvrir l'écran\nNotifications
+App -> Backend : GET /api/notifications\n?page=1&limit=20
+Backend -> DB : Récupérer les\nnotifications (desc)
+Backend --> App : { notifications: [...],\nunreadCount: 5 }
+App --> User : Liste des notifications\n(non lues en surbrillance)
+
+User -> App : Cliquer sur une\nnotification
+App -> Backend : PUT /api/notifications/:id/read
+Backend -> DB : Marquer read=true\nreadAt=now()
+App -> App : Naviguer vers l'écran\ncorrespondant\n(DealDetails, Chat, etc.)
+
+@enduml

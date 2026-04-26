@@ -1,0 +1,12 @@
+{
+  "extends": "expo/tsconfig.base",
+  "include": [
+    "**/*.ts",
+    "**/*.tsx"
+  ],
+  "exclude": [
+    "backend/**/*",
+    "baileys-server/**/*",
+    "face-verification-service/**/*"
+  ]
+}

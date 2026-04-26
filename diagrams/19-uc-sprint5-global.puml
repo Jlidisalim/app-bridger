@@ -1,0 +1,81 @@
+@startuml
+title Diagramme de Cas d'Utilisation Global — Sprint 5\n(Messagerie, Paiement, Avis et Litiges)
+
+left to right direction
+skinparam actorStyle awesome
+
+actor "Utilisateur\n(Sender/Traveler)" as User
+actor "Administrateur" as Admin
+actor "Stripe" as Stripe
+actor "Socket.io\nServer" as WS
+actor "Expo Push\nService" as Push
+
+rectangle "Sprint 5 — Fonctionnalités Transversales" {
+
+  package "Messagerie temps réel" {
+    usecase "Consulter la liste\ndes conversations" as UC_MsgList
+    usecase "Envoyer un message\ntexte" as UC_SendMsg
+    usecase "Envoyer une image\nou un document" as UC_SendMedia
+    usecase "Voir l'indicateur\nde lecture" as UC_ReadReceipt
+  }
+
+  package "Paiement et Wallet" {
+    usecase "Payer en séquestre\n(Escrow)" as UC_Pay
+    usecase "Consulter le\nsolde wallet" as UC_Balance
+    usecase "Voir l'historique\ndes transactions" as UC_History
+    usecase "Effectuer un\ndépôt" as UC_Deposit
+    usecase "Effectuer un\nretrait" as UC_Withdraw
+  }
+
+  package "Évaluations" {
+    usecase "Évaluer un utilisateur\naprès livraison" as UC_Review
+    usecase "Donner une note\n(1 à 5 étoiles)" as UC_Rate
+    usecase "Rédiger un\ncommentaire" as UC_Comment
+  }
+
+  package "Litiges" {
+    usecase "Ouvrir un litige" as UC_Dispute
+    usecase "Décrire le problème\n+ pièces jointes" as UC_Describe
+    usecase "Arbitrer un litige" as UC_Arbitrate
+  }
+
+  package "Profil et Notifications" {
+    usecase "Gérer le profil" as UC_Profile
+    usecase "Modifier les\ninformations" as UC_EditProfile
+    usecase "Recevoir des\nnotifications push" as UC_Notif
+    usecase "Configurer les\npréférences notif" as UC_NotifSettings
+    usecase "Accéder aux\nparamètres" as UC_Settings
+  }
+}
+
+User --> UC_MsgList
+User --> UC_SendMsg
+User --> UC_SendMedia
+User --> UC_ReadReceipt
+User --> UC_Pay
+User --> UC_Balance
+User --> UC_History
+User --> UC_Deposit
+User --> UC_Withdraw
+User --> UC_Review
+User --> UC_Dispute
+User --> UC_Profile
+User --> UC_Notif
+User --> UC_Settings
+
+Admin --> UC_Arbitrate
+
+UC_SendMsg --> WS
+UC_SendMedia --> WS
+UC_Pay --> Stripe
+UC_Deposit --> Stripe
+UC_Withdraw --> Stripe
+UC_Notif --> Push
+
+UC_Review ..> UC_Rate : <<include>>
+UC_Review ..> UC_Comment : <<include>>
+UC_Dispute ..> UC_Describe : <<include>>
+UC_Profile ..> UC_EditProfile : <<extend>>
+UC_Notif ..> UC_NotifSettings : <<extend>>
+
+@enduml

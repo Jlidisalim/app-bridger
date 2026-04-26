@@ -1,0 +1,106 @@
+@startuml
+title Diagramme d'Activité — Processus KYC Complet
+
+start
+
+:Utilisateur lance l'application;
+
+if (Premier lancement ?) then (oui)
+  :Afficher les écrans d'onboarding\n(3 écrans de présentation);
+  :Cliquer sur "Commencer";
+else (non)
+  :Afficher l'écran de connexion;
+endif
+
+:Saisir le numéro de téléphone\n(avec indicatif pays);
+
+:Valider le format du numéro;
+
+if (Format valide ?) then (oui)
+  :Envoyer le code OTP\nvia WhatsApp (Baileys);
+else (non)
+  :Afficher erreur :\n"Numéro invalide";
+  stop
+endif
+
+:Recevoir le code OTP\nsur WhatsApp;
+
+:Saisir le code OTP (6 chiffres);
+
+if (Code valide et non expiré ?) then (oui)
+  :Créer session JWT\n(accessToken + refreshToken);
+else (non)
+  if (Tentatives < 3 ?) then (oui)
+    :Afficher erreur :\n"Code invalide";
+    backward :Ressaisir le code;
+  else (non)
+    :Bloquer : "Trop de tentatives"\nProposer de renvoyer le code;
+    stop
+  endif
+endif
+
+if (Nouvel utilisateur ?) then (oui)
+  ' === Étape KYC Document ===
+  :Choisir le type de document\n(CNI / Passeport / Permis);
+
+  :Photographier le document\n(recto);
+
+  :Photographier le document\n(verso);
+
+  :Uploader les images\nvers Cloudinary;
+
+  :Enregistrer KycDocument\n(status = PENDING);
+
+  ' === Étape Vérification Faciale ===
+  :Prendre un selfie\navec la caméra frontale;
+
+  :Envoyer selfie + document\nau service IA (FastAPI);
+
+  fork
+    :RetinaFace :\nDétecter le visage\ndans le selfie;
+  fork again
+    :RetinaFace :\nDétecter le visage\ndans le document;
+  end fork
+
+  if (Visages détectés ?) then (oui)
+    :ArcFace :\nExtraire embedding selfie\n(512 dimensions);
+
+    :ArcFace :\nExtraire embedding document\n(512 dimensions);
+
+    :Calculer la similarité\ncosinus entre les 2 embeddings;
+
+    if (Score >= 0.6 ?) then (oui)
+      :Statut = VERIFIED;
+      :Stocker l'embedding facial\nen base de données;
+      :kycStatus = APPROVED;
+      :Afficher : "Identité vérifiée\nwith score: X.XX";
+      #palegreen:Rediriger vers\nHome Screen;
+    else (non)
+      :Statut = FAILED;
+      :Afficher : "Vérification échouée\nScore trop bas";
+
+      if (Réessayer ?) then (oui)
+        backward :Reprendre le selfie;
+      else (non)
+        :kycStatus = REJECTED;
+        #salmon:Accès limité;
+        stop
+      endif
+    endif
+  else (non)
+    :Afficher : "Aucun visage\ndétecté dans l'image";
+
+    if (Réessayer ?) then (oui)
+      backward :Reprendre la photo;
+    else (non)
+      stop
+    endif
+  endif
+
+else (non — utilisateur existant)
+  #palegreen:Rediriger directement\nvers Home Screen;
+endif
+
+stop
+
+@enduml

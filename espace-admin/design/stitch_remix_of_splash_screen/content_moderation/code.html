@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Bridger Admin | Content Moderation</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "outline-variant": "#c5c5d3",
+                    "tertiary-fixed": "#ffdbcb",
+                    "surface-dim": "#d8dadc",
+                    "background": "#f7f9fb",
+                    "tertiary": "#4b1c00",
+                    "on-primary-fixed": "#00164e",
+                    "surface": "#f7f9fb",
+                    "surface-bright": "#f7f9fb",
+                    "secondary-fixed": "#e2dfff",
+                    "on-error": "#ffffff",
+                    "on-tertiary": "#ffffff",
+                    "on-primary-fixed-variant": "#264191",
+                    "inverse-surface": "#2d3133",
+                    "surface-variant": "#e0e3e5",
+                    "tertiary-fixed-dim": "#ffb691",
+                    "outline": "#757682",
+                    "surface-container-high": "#e6e8ea",
+                    "on-primary-container": "#90a8ff",
+                    "on-secondary-fixed": "#0f0069",
+                    "on-surface-variant": "#444651",
+                    "inverse-on-surface": "#eff1f3",
+                    "secondary-fixed-dim": "#c3c0ff",
+                    "tertiary-container": "#6e2c00",
+                    "primary": "#00236f",
+                    "surface-tint": "#4059aa",
+                    "surface-container-low": "#f2f4f6",
+                    "secondary-container": "#645efb",
+                    "on-tertiary-fixed": "#341100",
+                    "on-secondary": "#ffffff",
+                    "inverse-primary": "#b6c4ff",
+                    "on-tertiary-container": "#f39461",
+                    "primary-fixed-dim": "#b6c4ff",
+                    "on-background": "#191c1e",
+                    "on-primary": "#ffffff",
+                    "surface-container": "#eceef0",
+                    "secondary": "#4b41e1",
+                    "on-error-container": "#93000a",
+                    "primary-container": "#1e3a8a",
+                    "surface-container-lowest": "#ffffff",
+                    "error-container": "#ffdad6",
+                    "surface-container-highest": "#e0e3e5",
+                    "on-secondary-container": "#fffbff",
+                    "primary-fixed": "#dce1ff",
+                    "on-surface": "#191c1e",
+                    "error": "#ba1a1a",
+                    "on-tertiary-fixed-variant": "#773205",
+                    "on-secondary-fixed-variant": "#3323cc"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": ["Inter"],
+                    "body": ["Inter"],
+                    "label": ["Inter"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-surface text-on-surface antialiased">
+<aside class="h-screen w-64 fixed left-0 top-0 bg-slate-50 dark:bg-slate-950 flex flex-col h-full py-8 space-y-4 z-50">
+<div class="px-8 mb-8">
+<h1 class="text-2xl font-black text-blue-900 dark:text-white">Bridger</h1>
+<p class="text-slate-500 font-inter label-md tracking-wider uppercase text-[10px] mt-1">Intelligent Monolith</p>
+</div>
+<nav class="flex-1 px-4 space-y-1">
+<a class="flex items-center px-4 py-4 text-slate-500 dark:text-slate-400 hover:text-blue-900 dark:hover:text-blue-200 transition-all font-inter label-md tracking-wider uppercase text-xs" href="#">
+<span class="material-symbols-outlined mr-3" data-icon="dashboard">dashboard</span>
+                Dashboard
+            </a>
+<a class="flex items-center px-4 py-4 text-slate-500 dark:text-slate-400 hover:text-blue-900 dark:hover:text-blue-200 transition-all font-inter label-md tracking-wider uppercase text-xs" href="#">
+<span class="material-symbols-outlined mr-3" data-icon="monitoring">monitoring</span>
+                Analytics
+            </a>
+<!-- Active State: Portfolio/Moderation context mapping -->
+<a class="flex items-center px-4 py-4 text-blue-700 dark:text-blue-400 border-r-2 border-blue-700 dark:border-blue-400 font-inter label-md tracking-wider uppercase text-xs" href="#">
+<span class="material-symbols-outlined mr-3" data-icon="security" style="font-variation-settings: 'FILL' 1;">security</span>
+                Risk assessment
+            </a>
+<a class="flex items-center px-4 py-4 text-slate-500 dark:text-slate-400 hover:text-blue-900 dark:hover:text-blue-200 transition-all font-inter label-md tracking-wider uppercase text-xs" href="#">
+<span class="material-symbols-outlined mr-3" data-icon="account_balance">account_balance</span>
+                Portfolio
+            </a>
+<a class="flex items-center px-4 py-4 text-slate-500 dark:text-slate-400 hover:text-blue-900 dark:hover:text-blue-200 transition-all font-inter label-md tracking-wider uppercase text-xs" href="#">
+<span class="material-symbols-outlined mr-3" data-icon="description">description</span>
+                Reporting
+            </a>
+</nav>
+<div class="px-4 mt-auto pt-8 space-y-1">
+<a class="flex items-center px-4 py-3 text-slate-500 dark:text-slate-400 hover:text-blue-900 transition-all text-xs font-inter label-md tracking-wider uppercase" href="#">
+<span class="material-symbols-outlined mr-3" data-icon="help">help</span>
+                Help Center
+            </a>
+<a class="flex items-center px-4 py-3 text-slate-500 dark:text-slate-400 hover:text-blue-900 transition-all text-xs font-inter label-md tracking-wider uppercase" href="#">
+<span class="material-symbols-outlined mr-3" data-icon="contact_support">contact_support</span>
+                Support
+            </a>
+</div>
+</aside>
+<div class="ml-64 min-h-screen">
+<header class="w-full sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl flex justify-between items-center px-8 py-4 shadow-[0_32px_64px_rgba(30,58,138,0.06)]">
+<div class="flex items-center space-x-6">
+<h2 class="text-xl font-semibold tracking-tight text-blue-900 dark:text-blue-50">Content Moderation</h2>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" data-icon="search">search</span>
+<input class="bg-surface-container-low border-none rounded-xl pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-primary/20 w-64 transition-all" placeholder="Search reports..." type="text"/>
+</div>
+</div>
+<div class="flex items-center space-x-4">
+<button class="p-2 text-slate-500 hover:bg-slate-100/50 dark:hover:bg-slate-800/50 rounded-lg transition-colors active:scale-95 duration-200">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="p-2 text-slate-500 hover:bg-slate-100/50 dark:hover:bg-slate-800/50 rounded-lg transition-colors active:scale-95 duration-200">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</button>
+<div class="h-8 w-8 rounded-full overflow-hidden">
+<img alt="User profile" class="h-full w-full object-cover" data-alt="professional portrait of a male system administrator in a clean office setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuApRFvEpd2FjnGer1BfrTGo2VeknTduFKDQixF5PYCNjJ43WEFxSXPEVGm7udBHbmKc83d-kHeadtJ-dJ4zLTJj_LX-gp5SYbqAebyi5Z7oMWBd7V2g4uGpzagRmhcVGv-motV9TDiNiq6QieKFwUroQd_J0UQ_dcs-dQt52xYeNRdbb5m7CVNmxoAwo49IpmozyuD5YCr3yvZJgnBvxPb0pF3lFhXjhsc4t8t54Y1tCyBOQM5jp1yFU0IYYkWHcrdrAZm-c8V9JDk"/>
+</div>
+</div>
+</header>
+<main class="p-8">
+<div class="grid grid-cols-12 gap-8">
+<div class="col-span-12 lg:col-span-8 space-y-8">
+<section>
+<div class="flex items-center justify-between mb-6">
+<h3 class="text-xs font-inter label-md tracking-widest uppercase font-semibold text-on-surface-variant">Active Reports Queue</h3>
+<div class="flex space-x-2">
+<span class="px-3 py-1 bg-primary-container/20 text-primary text-[10px] font-bold rounded-full uppercase tracking-tighter">All: 142</span>
+<span class="px-3 py-1 bg-error-container/20 text-error text-[10px] font-bold rounded-full uppercase tracking-tighter">Critical: 12</span>
+</div>
+</div>
+<div class="space-y-4">
+<div class="bg-surface-container-lowest p-6 rounded-xl shadow-[0_32px_64px_rgba(30,58,138,0.06)] hover:bg-surface-container-low transition-all duration-300 group">
+<div class="flex items-start justify-between">
+<div class="flex items-start space-x-4">
+<div class="h-10 w-10 rounded-full bg-slate-100 flex-shrink-0 flex items-center justify-center text-slate-400">
+<span class="material-symbols-outlined" data-icon="chat">chat</span>
+</div>
+<div>
+<div class="flex items-center space-x-2">
+<span class="font-semibold text-sm">Marcus Vane</span>
+<span class="text-xs text-on-surface-variant">• 2 minutes ago</span>
+<span class="bg-surface-container px-2 py-0.5 rounded text-[10px] uppercase font-bold text-slate-500">Comment</span>
+</div>
+<p class="text-sm mt-2 text-on-surface-variant leading-relaxed">
+                                                "This platform is absolutely ridiculous. Your support team is incompetent and I hope your servers crash permanently."
+                                            </p>
+</div>
+</div>
+<div class="flex flex-col items-end">
+<div class="h-12 w-12 rounded-full border-4 border-error-container flex items-center justify-center mb-1">
+<span class="text-[10px] font-bold text-error">88%</span>
+</div>
+<span class="text-[10px] font-bold uppercase text-error-container bg-error px-1 rounded tracking-tighter">Toxic</span>
+</div>
+</div>
+<div class="mt-6 pt-6 border-t border-outline-variant/15 flex items-center justify-between">
+<div class="flex items-center space-x-2">
+<span class="text-xs text-slate-400">Reported for:</span>
+<span class="text-xs font-medium px-2 py-1 bg-surface-container-high rounded-lg">Harassment</span>
+</div>
+<div class="flex space-x-3">
+<button class="px-4 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">Hide</button>
+<button class="px-4 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">Warn User</button>
+<button class="px-4 py-1.5 text-xs font-semibold text-white bg-error rounded-lg shadow-sm active:scale-95 transition-all">Delete</button>
+</div>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-6 rounded-xl shadow-[0_32px_64px_rgba(30,58,138,0.06)] hover:bg-surface-container-low transition-all duration-300 group">
+<div class="flex items-start justify-between">
+<div class="flex items-start space-x-4">
+<div class="h-10 w-10 rounded-full bg-slate-100 flex-shrink-0 flex items-center justify-center text-slate-400">
+<span class="material-symbols-outlined" data-icon="mail">mail</span>
+</div>
+<div>
+<div class="flex items-center space-x-2">
+<span class="font-semibold text-sm">Anonymous Sender</span>
+<span class="text-xs text-on-surface-variant">• 15 minutes ago</span>
+<span class="bg-surface-container px-2 py-0.5 rounded text-[10px] uppercase font-bold text-slate-500">Direct Message</span>
+</div>
+<p class="text-sm mt-2 text-on-surface-variant leading-relaxed">
+                                                "Check out this crypto link for 1000% returns: https://bit.ly/scam-link-example-only"
+                                            </p>
+</div>
+</div>
+<div class="flex flex-col items-end">
+<div class="h-12 w-12 rounded-full border-4 border-tertiary-fixed-dim flex items-center justify-center mb-1">
+<span class="text-[10px] font-bold text-tertiary">95%</span>
+</div>
+<span class="text-[10px] font-bold uppercase text-tertiary-fixed bg-tertiary px-1 rounded tracking-tighter">Spam</span>
+</div>
+</div>
+<div class="mt-6 pt-6 border-t border-outline-variant/15 flex items-center justify-between">
+<div class="flex items-center space-x-2">
+<span class="text-xs text-slate-400">Reported for:</span>
+<span class="text-xs font-medium px-2 py-1 bg-surface-container-high rounded-lg">Suspicious Link</span>
+</div>
+<div class="flex space-x-3">
+<button class="px-4 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">Hide</button>
+<button class="px-4 py-1.5 text-xs font-semibold text-white bg-primary rounded-lg shadow-sm active:scale-95 transition-all">Suspend User</button>
+<button class="px-4 py-1.5 text-xs font-semibold text-white bg-error rounded-lg shadow-sm active:scale-95 transition-all">Delete</button>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section>
+<h3 class="text-xs font-inter label-md tracking-widest uppercase font-semibold text-on-surface-variant mb-6">Recent Actions Audit</h3>
+<div class="bg-surface-container-lowest rounded-xl overflow-hidden shadow-[0_32px_64px_rgba(30,58,138,0.06)]">
+<table class="w-full text-left">
+<thead class="bg-surface-container-low">
+<tr>
+<th class="px-6 py-4 text-[10px] uppercase font-bold text-slate-500">Moderator</th>
+<th class="px-6 py-4 text-[10px] uppercase font-bold text-slate-500">Action</th>
+<th class="px-6 py-4 text-[10px] uppercase font-bold text-slate-500">Target</th>
+<th class="px-6 py-4 text-[10px] uppercase font-bold text-slate-500">Time</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/15">
+<tr class="hover:bg-surface transition-colors cursor-default">
+<td class="px-6 py-4 flex items-center space-x-3">
+<div class="h-6 w-6 rounded-full bg-blue-100 border border-blue-200"></div>
+<span class="text-sm font-medium">Sarah J.</span>
+</td>
+<td class="px-6 py-4">
+<span class="bg-error-container text-on-error-container px-2 py-0.5 rounded-sm text-[10px] font-bold uppercase">Permanent Ban</span>
+</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant">user_9921</td>
+<td class="px-6 py-4 text-sm text-slate-400">12m ago</td>
+</tr>
+<tr class="hover:bg-surface transition-colors cursor-default">
+<td class="px-6 py-4 flex items-center space-x-3">
+<div class="h-6 w-6 rounded-full bg-green-100 border border-green-200"></div>
+<span class="text-sm font-medium">AutoMod</span>
+</td>
+<td class="px-6 py-4">
+<span class="bg-surface-container-highest text-on-surface-variant px-2 py-0.5 rounded-sm text-[10px] font-bold uppercase">Soft Delete</span>
+</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant">comment_442</td>
+<td class="px-6 py-4 text-sm text-slate-400">45m ago</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</div>
+<div class="col-span-12 lg:col-span-4 space-y-8">
+<section class="bg-primary-container text-white p-8 rounded-xl relative overflow-hidden shadow-xl">
+<div class="absolute top-0 right-0 p-8 opacity-10">
+<span class="material-symbols-outlined text-8xl" data-icon="verified_user">verified_user</span>
+</div>
+<h4 class="text-[10px] font-bold uppercase tracking-widest text-primary-fixed mb-2">Global System Pulse</h4>
+<div class="flex items-baseline space-x-2">
+<span class="text-5xl font-extrabold tracking-tighter">94.2</span>
+<span class="text-primary-fixed/80 font-medium">/ 100</span>
+</div>
+<p class="text-xs mt-4 text-primary-fixed/80 leading-relaxed">
+                            Platform safety index is stable. Automated detection filters are operating at 98.4% precision.
+                        </p>
+<button class="mt-8 w-full bg-white text-primary font-bold py-3 rounded-lg text-xs tracking-wider uppercase transition-all hover:bg-primary-fixed active:scale-95 shadow-lg">
+                            Review Policy Updates
+                        </button>
+</section>
+<section class="bg-surface-container-low p-6 rounded-xl">
+<h3 class="text-xs font-inter label-md tracking-widest uppercase font-semibold text-on-surface-variant mb-6">Toxicity Breakdown</h3>
+<div class="space-y-6">
+<div>
+<div class="flex justify-between text-xs font-medium mb-2">
+<span>Hate Speech</span>
+<span class="text-error">12.5%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-high rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-tertiary to-error w-[12.5%]"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between text-xs font-medium mb-2">
+<span>Sexual Content</span>
+<span class="text-on-tertiary-container">4.2%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-high rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-secondary to-tertiary w-[4.2%]"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between text-xs font-medium mb-2">
+<span>Insult / Flirting</span>
+<span class="text-secondary">42.8%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-high rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-primary to-secondary w-[42.8%]"></div>
+</div>
+</div>
+</div>
+</section>
+<section class="bg-surface-container-lowest p-6 rounded-xl border-l-4 border-secondary shadow-[0_32px_64px_rgba(30,58,138,0.06)]">
+<div class="flex items-center space-x-3 mb-4">
+<span class="material-symbols-outlined text-secondary" data-icon="lightbulb">lightbulb</span>
+<h4 class="text-xs font-bold uppercase tracking-wider text-on-surface">Admin Tip</h4>
+</div>
+<p class="text-xs text-on-surface-variant leading-relaxed">
+                            Use the <kbd class="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] border border-slate-200">Shift + D</kbd> shortcut to quickly delete confirmed violations in the queue.
+                        </p>
+</section>
+</div>
+</div>
+</main>
+</div>
+</body></html>

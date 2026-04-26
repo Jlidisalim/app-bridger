@@ -1,0 +1,73 @@
+@startuml
+title Diagramme de Séquence — Ouverture et Résolution d'un Litige
+
+skinparam sequenceArrowThickness 2
+
+actor "Utilisateur\n(Plaignant)" as Filer
+participant "Application\nMobile" as App
+participant "Backend API\n(Express.js)" as Backend
+database "Base de\nDonnées" as DB
+participant "Cloudinary" as Cloud
+participant "Socket.io" as WS
+participant "Stripe" as Stripe
+actor "Administrateur" as Admin
+
+== Phase 1 : Ouverture du litige ==
+
+Filer -> App : Ouvrir l'écran Litige\n(depuis DealDetails)
+App --> Filer : Formulaire de litige
+
+Filer -> App : Sélectionner la catégorie\n(Colis endommagé / Non livré\n/ Fraude / Autre)
+Filer -> App : Décrire le problème
+Filer -> App : Joindre des preuves\n(photos)
+
+App -> Cloud : Upload photos preuves
+Cloud --> App : URLs des images
+
+App -> Backend : POST /api/disputes\n{ dealId, reason,\ndescription, evidence: [urls] }
+
+Backend -> DB : Vérifier le Deal\n(status = COMPLETED\nou DELIVERED)
+Backend -> DB : Créer Dispute\n(filerId, respondentId,\nreason, description,\nstatus = OPEN)
+Backend -> DB : Mettre à jour Deal\n(status = DISPUTED)
+
+Backend -> DB : Créer Notification\n(respondentId,\n"Un litige a été ouvert\nconcernant le deal X")
+Backend -> DB : Créer Notification\n(adminId,\n"Nouveau litige à examiner")
+Backend -> WS : Émettre "new-dispute"
+
+Backend --> App : 201 Created\n{ disputeId, status: "OPEN" }
+App --> Filer : "Litige ouvert.\nNotre équipe va examiner\nvotre demande."
+
+== Phase 2 : Examen par l'administrateur ==
+
+Admin -> Admin : Consulter le tableau\nde bord litiges
+Admin -> Admin : Examiner les preuves\n(photos, messages du chat)
+Admin -> Admin : Contacter les parties\nsi nécessaire
+
+Backend -> DB : Mettre à jour Dispute\n(status = UNDER_REVIEW)
+
+== Phase 3 : Décision ==
+
+alt Remboursement total
+  Admin -> Admin : Décider : remboursement
+  Backend -> Stripe : stripe.refunds.create({\n  payment_intent: "pi_xxx"\n})
+  Stripe --> Backend : { refundId }
+  Backend -> DB : Créer Transaction\n(type = REFUND,\namount = 50.00)
+  Backend -> DB : Mettre à jour Wallet\ntraveler (balance -= montant)
+  Backend -> DB : Mettre à jour Dispute\n(status = RESOLVED,\nresolution = "Remboursement total")
+  Backend -> WS : Notifier le plaignant\n"Litige résolu.\nRemboursement effectué."
+
+else Remboursement partiel
+  Admin -> Admin : Décider : remboursement partiel
+  Backend -> Stripe : Refund partiel
+  Backend -> DB : Dispute RESOLVED\n(resolution = "Remboursement partiel")
+
+else Rejet du litige
+  Admin -> Admin : Décider : pas de remboursement
+  Backend -> DB : Mettre à jour Dispute\n(status = RESOLVED,\nresolution = "Litige rejeté.\nAucun remboursement.")
+  Backend -> WS : Notifier le plaignant
+end
+
+Backend -> DB : Mettre à jour Dispute\n(status = CLOSED)
+Backend -> DB : Créer AuditLog\n(action = "DISPUTE_RESOLVED",\ndetails)
+
+@enduml

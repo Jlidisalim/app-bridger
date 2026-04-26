@@ -1,0 +1,260 @@
+@startuml
+title Diagramme de Classes Global — Bridger
+
+skinparam classAttributeIconSize 0
+skinparam classFontSize 11
+
+class User {
+  +id : String <<cuid>>
+  +phone : String <<unique>>
+  +name : String
+  +avatar : String
+  +pushToken : String
+  +stripeConnectAccountId : String
+  +stripeAccountStatus : String
+  +kycStatus : String
+  +faceEmbedding : String
+  +faceVerificationStatus : String
+  +faceVerifiedAt : DateTime
+  +faceConfidenceScore : Float
+  +isAdmin : Boolean
+  +email : String
+  +verified : Boolean
+  +walletBalance : Float
+  +rating : Float
+  +completionRate : Float
+  +totalDeals : Int
+  +createdAt : DateTime
+  +updatedAt : DateTime
+}
+
+class Session {
+  +id : String <<cuid>>
+  +token : String <<unique>>
+  +refreshToken : String <<unique>>
+  +expiresAt : DateTime
+  +createdAt : DateTime
+}
+
+class OTP {
+  +id : String <<cuid>>
+  +phone : String
+  +code : String
+  +attempts : Int
+  +verified : Boolean
+  +expiresAt : DateTime
+  +createdAt : DateTime
+}
+
+class Deal {
+  +id : String <<cuid>>
+  +title : String
+  +description : String
+  +fromCity : String
+  +toCity : String
+  +fromCountry : String
+  +toCountry : String
+  +fromLat : Float
+  +fromLng : Float
+  +toLat : Float
+  +toLng : Float
+  +packageSize : String
+  +weight : Float
+  +price : Float
+  +currency : String
+  +status : String
+  +pickupDate : DateTime
+  +deliveryDate : DateTime
+  +images : String
+  +qrCode : String
+  +qrSecret : String
+  +createdAt : DateTime
+  +updatedAt : DateTime
+}
+
+class Trip {
+  +id : String <<cuid>>
+  +fromCity : String
+  +toCity : String
+  +fromCountry : String
+  +toCountry : String
+  +departureDate : DateTime
+  +arrivalDate : DateTime
+  +availableWeight : Float
+  +availableVolume : Float
+  +pricePerKg : Float
+  +maxPackageSize : String
+  +flightNumber : String
+  +airline : String
+  +status : String
+  +createdAt : DateTime
+}
+
+class TrackingEvent {
+  +id : String <<cuid>>
+  +status : String
+  +location : String
+  +note : String
+  +actor : String
+  +createdAt : DateTime
+}
+
+class Transaction {
+  +id : String <<cuid>>
+  +type : String
+  +amount : Float
+  +currency : String
+  +status : String
+  +stripePaymentIntentId : String
+  +description : String
+  +createdAt : DateTime
+}
+
+class Wallet {
+  +id : String <<cuid>>
+  +balance : Float
+  +currency : String
+  +updatedAt : DateTime
+}
+
+class ChatRoom {
+  +id : String <<cuid>>
+  +createdAt : DateTime
+  +updatedAt : DateTime
+}
+
+class ChatParticipant {
+  +id : String <<cuid>>
+  +joinedAt : DateTime
+}
+
+class ChatMessage {
+  +id : String <<cuid>>
+  +content : String
+  +type : String
+  +read : Boolean
+  +readAt : DateTime
+  +createdAt : DateTime
+}
+
+class Dispute {
+  +id : String <<cuid>>
+  +reason : String
+  +description : String
+  +status : String
+  +resolution : String
+  +resolvedAt : DateTime
+  +createdAt : DateTime
+}
+
+class Review {
+  +id : String <<cuid>>
+  +rating : Int
+  +comment : String
+  +isPublic : Boolean
+  +createdAt : DateTime
+}
+
+class Notification {
+  +id : String <<cuid>>
+  +title : String
+  +body : String
+  +type : String
+  +data : String
+  +read : Boolean
+  +readAt : DateTime
+  +createdAt : DateTime
+}
+
+class NotificationSettings {
+  +id : String <<cuid>>
+  +dealUpdates : Boolean
+  +messages : Boolean
+  +payments : Boolean
+  +reviews : Boolean
+  +marketing : Boolean
+}
+
+class TrustScore {
+  +id : String <<cuid>>
+  +score : Float
+  +totalDeals : Int
+  +completedDeals : Int
+  +disputesCount : Int
+  +averageRating : Float
+  +updatedAt : DateTime
+}
+
+class FaceScan {
+  +id : String <<cuid>>
+  +scanType : String
+  +imageUrl : String
+  +embedding : String
+  +status : String
+  +confidenceScore : Float
+  +failureReason : String
+  +createdAt : DateTime
+}
+
+class KycDocument {
+  +id : String <<cuid>>
+  +documentType : String
+  +frontImageUrl : String
+  +backImageUrl : String
+  +status : String
+  +extractedData : String
+  +verifiedAt : DateTime
+  +createdAt : DateTime
+}
+
+class CustomsDeclaration {
+  +id : String <<cuid>>
+  +declaredValue : Float
+  +currency : String
+  +items : String
+  +category : String
+  +createdAt : DateTime
+}
+
+class AuditLog {
+  +id : String <<cuid>>
+  +action : String
+  +resource : String
+  +resourceId : String
+  +details : String
+  +ipAddress : String
+  +createdAt : DateTime
+}
+
+' ============ RELATIONS ============
+
+User "1" --> "0..*" Session : possède
+User "1" --> "0..*" Deal : crée (sender)
+User "1" --> "0..*" Deal : transporte (traveler)
+User "1" --> "0..*" Trip : publie
+User "1" --> "0..*" Transaction : effectue
+User "1" --> "0..1" Wallet : possède
+User "1" --> "0..1" TrustScore : a
+User "1" --> "0..*" FaceScan : subit
+User "1" --> "0..*" KycDocument : soumet
+User "1" --> "0..*" Notification : reçoit
+User "1" --> "0..1" NotificationSettings : configure
+User "1" --> "0..*" ChatParticipant : participe
+User "1" --> "0..*" ChatMessage : envoie
+User "1" --> "0..*" Dispute : ouvre (filer)
+User "1" --> "0..*" Dispute : reçoit (respondent)
+User "1" --> "0..*" Review : rédige (author)
+User "1" --> "0..*" Review : reçoit (target)
+User "1" --> "0..*" AuditLog : génère
+
+Deal "1" --> "0..*" TrackingEvent : suit
+Deal "1" --> "0..*" Transaction : génère
+Deal "1" --> "0..1" ChatRoom : crée
+Deal "1" --> "0..*" Dispute : concerne
+Deal "1" --> "0..*" Review : évalue
+Deal "1" --> "0..*" CustomsDeclaration : déclare
+
+ChatRoom "1" --> "0..*" ChatParticipant : contient
+ChatRoom "1" --> "0..*" ChatMessage : contient
+
+@enduml

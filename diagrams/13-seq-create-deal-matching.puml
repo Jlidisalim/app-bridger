@@ -1,0 +1,69 @@
+@startuml
+title Diagramme de Séquence — Publication d'une Annonce\net Matching avec un Voyageur
+
+skinparam sequenceArrowThickness 2
+
+actor "Expéditeur" as Sender
+participant "Application\nMobile" as App
+participant "Backend API\n(Express.js)" as Backend
+participant "Cloudinary" as Cloud
+database "Base de\nDonnées" as DB
+participant "Socket.io\nServer" as WS
+actor "Voyageur" as Traveler
+
+== Phase 1 : Création de l'annonce par l'expéditeur ==
+
+Sender -> App : Remplir les détails du colis\n(titre, taille, poids)
+Sender -> App : Ajouter des photos du colis
+App -> Cloud : Upload images
+Cloud --> App : URLs des images
+Sender -> App : Définir la route\n(Tunis → Paris)
+Sender -> App : Saisir les coordonnées\ndu destinataire
+Sender -> App : Fixer le prix (50 USD)
+
+App -> App : Calculer suggestion prix\n(base route + poids × catégorie)
+App -> App : Calculer commission\nplateforme (5% = 2.50 USD)
+
+Sender -> App : Cliquer "Publier l'annonce"
+
+App -> Backend : POST /api/deals\n{ title, fromCity, toCity,\npackageSize, weight, price,\nimages, receiver, dates }
+
+Backend -> Backend : Valider les données (Zod)
+Backend -> Backend : Générer QR code\n(dealId + HMAC secret)
+Backend -> DB : Créer Deal\n(status = OPEN)
+Backend -> DB : Créer TrackingEvent\n(status = OPEN)
+
+Backend --> App : 201 Created\n{ deal, qrCode }
+App --> Sender : Afficher "Annonce publiée\navec succès !"
+
+== Phase 2 : Matching avec un voyageur ==
+
+Traveler -> App : Ouvrir l'écran Explore
+App -> Backend : GET /api/deals?fromCity=Tunis\n&toCity=Paris&status=OPEN
+Backend -> DB : Rechercher les deals\ncorrespondants
+Backend --> App : 200 OK\n{ deals: [...] }
+App --> Traveler : Afficher la liste\ndes annonces disponibles
+
+Traveler -> App : Cliquer sur un deal
+App -> Backend : GET /api/deals/:dealId
+Backend -> DB : Récupérer détails\ndu deal + profil sender
+Backend --> App : { deal, sender: { name,\nrating, completionRate } }
+App --> Traveler : Afficher les détails\ndu colis + profil expéditeur
+
+Traveler -> App : Cliquer "Accepter le deal"
+App -> Backend : POST /api/deals/:dealId/accept
+Backend -> DB : Mettre à jour Deal\n(travelerId, status=MATCHED)
+Backend -> DB : Créer TrackingEvent\n(status = MATCHED)
+Backend -> DB : Créer ChatRoom\n(dealId)
+Backend -> DB : Ajouter ChatParticipants\n(sender + traveler)
+
+Backend -> WS : Émettre événement\n"deal-matched"\n(senderId)
+
+WS --> App : Notification temps réel\n"Votre colis a été accepté\npar [Voyageur]"
+
+Backend --> App : 200 OK\n{ deal (status=MATCHED),\nchatRoom }
+App --> Traveler : "Deal accepté !\nVous pouvez maintenant\nchatter avec l'expéditeur"
+
+Backend -> DB : Créer Notification\n(senderId, "Deal accepté")
+
+@enduml

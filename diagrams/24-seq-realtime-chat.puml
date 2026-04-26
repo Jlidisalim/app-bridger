@@ -1,0 +1,76 @@
+@startuml
+title Diagramme de Séquence — Messagerie Temps Réel (Socket.io)
+
+skinparam sequenceArrowThickness 2
+
+actor "Expéditeur" as Sender
+participant "App\nExpéditeur" as AppS
+participant "Socket.io\nServer" as WS
+participant "Backend API\n(Express.js)" as Backend
+participant "Cloudinary" as Cloud
+database "Base de\nDonnées" as DB
+participant "Expo Push\nService" as Push
+participant "App\nVoyageur" as AppT
+actor "Voyageur" as Traveler
+
+== Phase 1 : Connexion WebSocket ==
+
+Sender -> AppS : Ouvrir l'application
+AppS -> WS : connect()\n{ token: JWT }
+WS -> WS : Vérifier JWT
+WS -> WS : Enregistrer userId\ndans socket.rooms
+WS --> AppS : connected
+
+Traveler -> AppT : Ouvrir l'application
+AppT -> WS : connect()\n{ token: JWT }
+WS --> AppT : connected
+
+== Phase 2 : Chargement de l'historique ==
+
+Sender -> AppS : Ouvrir une conversation
+AppS -> Backend : GET /api/chat/rooms/:roomId/messages\n?page=1&limit=50
+Backend -> DB : Récupérer messages\n(ordonnés par date)
+Backend --> AppS : { messages: [...] }
+AppS --> Sender : Afficher les messages
+
+AppS -> Backend : PUT /api/chat/rooms/:roomId/read
+Backend -> DB : Marquer messages\ncomme lus (read=true)
+Backend -> WS : Émettre "messages-read"\n(travelerId, roomId)
+WS --> AppT : Messages marqués lus
+
+== Phase 3 : Envoi d'un message texte ==
+
+Sender -> AppS : Taper un message\net cliquer Envoyer
+AppS -> WS : emit("send-message",\n{ roomId, content: "Bonjour",\ntype: "TEXT" })
+
+WS -> Backend : Traiter le message
+Backend -> DB : Créer ChatMessage\n(roomId, senderId,\ncontent, type=TEXT)
+Backend --> WS : Message sauvegardé\n{ messageId }
+
+WS -> WS : Vérifier si voyageur\nest connecté (online)
+
+alt Voyageur en ligne (connecté au socket)
+  WS --> AppT : emit("new-message",\n{ message })
+  AppT --> Traveler : Afficher le nouveau\nmessage instantanément
+else Voyageur hors ligne
+  WS -> Backend : Envoyer notification push
+  Backend -> DB : Créer Notification\n(userId=travelerId,\ntype=NEW_MESSAGE)
+  Backend -> Push : Envoyer push notification\n{ to: pushToken,\ntitle: "Nouveau message",\nbody: "Bonjour" }
+  Push --> AppT : Notification push\nsur le téléphone
+end
+
+WS --> AppS : emit("message-sent",\n{ messageId, status: "delivered" })
+AppS --> Sender : Afficher confirmation\n(coche de livraison)
+
+== Phase 4 : Envoi d'une image ==
+
+Sender -> AppS : Sélectionner une image\n(expo-image-picker)
+AppS -> Cloud : Upload image
+Cloud --> AppS : { imageUrl }
+AppS -> WS : emit("send-message",\n{ roomId, content: imageUrl,\ntype: "IMAGE" })
+WS -> Backend : Sauvegarder message
+Backend -> DB : Créer ChatMessage\n(type=IMAGE)
+WS --> AppT : emit("new-message",\n{ type: IMAGE, content: url })
+AppT --> Traveler : Afficher l'image\ndans la conversation
+
+@enduml

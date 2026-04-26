@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Reports Listing | Logistics Core</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "tertiary": "#4b1c00",
+                    "surface-bright": "#f7f9fb",
+                    "surface-dim": "#d8dadc",
+                    "error": "#ba1a1a",
+                    "secondary": "#4b41e1",
+                    "surface-container": "#eceef0",
+                    "inverse-surface": "#2d3133",
+                    "on-tertiary": "#ffffff",
+                    "on-secondary-container": "#fffbff",
+                    "surface-tint": "#4059aa",
+                    "on-background": "#191c1e",
+                    "secondary-fixed-dim": "#c3c0ff",
+                    "on-primary-fixed": "#00164e",
+                    "secondary-fixed": "#e2dfff",
+                    "outline-variant": "#c5c5d3",
+                    "primary": "#00236f",
+                    "tertiary-fixed": "#ffdbcb",
+                    "on-surface": "#191c1e",
+                    "primary-container": "#1e3a8a",
+                    "outline": "#757682",
+                    "background": "#f7f9fb",
+                    "tertiary-container": "#6e2c00",
+                    "primary-fixed-dim": "#b6c4ff",
+                    "error-container": "#ffdad6",
+                    "on-secondary-fixed": "#0f0069",
+                    "surface-container-highest": "#e0e3e5",
+                    "on-tertiary-fixed": "#341100",
+                    "on-error-container": "#93000a",
+                    "tertiary-fixed-dim": "#ffb691",
+                    "surface-container-lowest": "#ffffff",
+                    "on-tertiary-fixed-variant": "#773205",
+                    "secondary-container": "#645efb",
+                    "surface-container-high": "#e6e8ea",
+                    "surface-container-low": "#f2f4f6",
+                    "surface": "#f7f9fb",
+                    "on-primary-fixed-variant": "#264191",
+                    "on-tertiary-container": "#f39461",
+                    "on-primary-container": "#90a8ff",
+                    "on-error": "#ffffff",
+                    "inverse-on-surface": "#eff1f3",
+                    "on-secondary-fixed-variant": "#3323cc",
+                    "inverse-primary": "#b6c4ff",
+                    "primary-fixed": "#dce1ff",
+                    "on-secondary": "#ffffff",
+                    "surface-variant": "#e0e3e5",
+                    "on-surface-variant": "#444651",
+                    "on-primary": "#ffffff"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": ["Inter"],
+                    "body": ["Inter"],
+                    "label": ["Inter"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface antialiased">
+<!-- Sidebar Navigation -->
+<aside class="h-screen w-64 fixed left-0 top-0 bg-slate-50 dark:bg-slate-950 flex flex-col py-8 space-y-4 z-50">
+<div class="px-8 mb-8">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-container to-primary flex items-center justify-center text-white">
+<span class="material-symbols-outlined" data-icon="hub">hub</span>
+</div>
+<div>
+<h1 class="text-lg font-bold text-blue-900 dark:text-blue-100 leading-tight">Bridger Logistics</h1>
+<p class="text-[10px] label-md all-caps tracking-widest font-semibold text-slate-500 uppercase">Global Operations</p>
+</div>
+</div>
+</div>
+<nav class="flex-1 px-4 space-y-2">
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 dark:text-slate-500 hover:text-blue-700 dark:hover:text-blue-300 transition-all cursor-pointer group" href="#">
+<span class="material-symbols-outlined" data-icon="local_shipping">local_shipping</span>
+<span class="label-md all-caps tracking-widest font-semibold">Fleet Overview</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 dark:text-slate-500 hover:text-blue-700 dark:hover:text-blue-300 transition-all cursor-pointer group" href="#">
+<span class="material-symbols-outlined" data-icon="hub">hub</span>
+<span class="label-md all-caps tracking-widest font-semibold">Active Shipments</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 dark:text-slate-500 hover:text-blue-700 dark:hover:text-blue-300 transition-all cursor-pointer group" href="#">
+<span class="material-symbols-outlined" data-icon="map">map</span>
+<span class="label-md all-caps tracking-widest font-semibold">Route Optimization</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 dark:text-slate-500 hover:text-blue-700 dark:hover:text-blue-300 transition-all cursor-pointer group" href="#">
+<span class="material-symbols-outlined" data-icon="inventory_2">inventory_2</span>
+<span class="label-md all-caps tracking-widest font-semibold">Inventory</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-blue-800 dark:text-blue-400 border-r-2 border-blue-800 dark:border-blue-400 bg-transparent cursor-pointer group" href="#">
+<span class="material-symbols-outlined" data-icon="monitoring">monitoring</span>
+<span class="label-md all-caps tracking-widest font-semibold">Analytics</span>
+</a>
+</nav>
+<div class="px-4 pt-4 mt-auto border-t border-outline-variant/10">
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 dark:text-slate-500 hover:text-blue-700 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="help_outline">help_outline</span>
+<span class="label-md all-caps tracking-widest font-semibold">Help Center</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 dark:text-slate-500 hover:text-blue-700 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+<span class="label-md all-caps tracking-widest font-semibold">Logout</span>
+</a>
+</div>
+</aside>
+<main class="ml-64 min-h-screen">
+<!-- Top Navigation Bar -->
+<header class="w-full sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl shadow-[0_32px_64px_-15px_rgba(30,58,138,0.06)] flex justify-between items-center px-8 py-4">
+<div class="flex items-center gap-6">
+<h2 class="text-xl font-semibold tracking-tight text-blue-900 dark:text-white">Reports Central</h2>
+<div class="relative hidden lg:block">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" data-icon="search">search</span>
+<input class="pl-10 pr-4 py-2 bg-surface-container-low border-none rounded-xl text-sm focus:ring-2 focus:ring-primary-container w-64 transition-all" placeholder="Search reports..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</button>
+<div class="h-8 w-px bg-outline-variant/20 mx-2"></div>
+<div class="flex items-center gap-3">
+<div class="text-right">
+<p class="text-sm font-medium text-blue-900 leading-none">Admin User</p>
+<p class="text-[10px] text-slate-500 mt-1">System Controller</p>
+</div>
+<img alt="Administrator Profile" class="w-10 h-10 rounded-xl object-cover shadow-sm" data-alt="professional portrait of a middle-aged male executive in a sharp navy suit against a clean architectural background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAU9AFsxu8_zxOeXzy9wziAEjScAH2KNZLzUWOnSFxPLjZc-xJSQosjXRFGkKA_GMRHjBAxDUgAz1CY3wU3GDyueEgYtpUXtN7bNMht8Dg7DuJYUIZmFcnZG7t5xm0DT4sj3b3UlCm7JCZ4yIIn_YhASREU0GOB81rN7spB_BspMF0cJt2MDmbWrB_txv8VVJipXDlwawBSp2w5bMkYfXGhNeJw542qw3J-q_GbUMZ4ZITlpfiBcUcb5cABnUwzyMoQaMgMsOrq5BI"/>
+</div>
+</div>
+</header>
+<section class="p-8 space-y-8">
+<!-- Page Header & Actions -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+<div>
+<span class="label-md all-caps tracking-widest font-semibold text-secondary mb-2 block">System Intelligence</span>
+<h1 class="text-4xl font-semibold tracking-tight text-primary">Periodic Reports</h1>
+<p class="text-on-surface-variant mt-2 max-w-xl">Access and manage high-fidelity logistics data audits. Filter by temporal cycles or specific operational parameters.</p>
+</div>
+<div class="flex gap-3">
+<button class="flex items-center gap-2 px-6 py-3 bg-surface-container-lowest text-primary font-medium rounded-xl shadow-sm hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-[20px]" data-icon="auto_awesome">auto_awesome</span>
+                        Generate Instant Audit
+                    </button>
+<button class="flex items-center gap-2 px-6 py-3 bg-gradient-to-br from-primary-container to-primary text-white font-medium rounded-xl shadow-lg hover:shadow-primary-container/20 active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[20px]" data-icon="schedule_send">schedule_send</span>
+                        Schedule Automated
+                    </button>
+</div>
+</div>
+<!-- Dashboard Stats Bento -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+<div class="bg-surface-container-lowest p-6 rounded-xl relative overflow-hidden flex flex-col justify-between min-h-[140px]">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-secondary"></div>
+<span class="label-md all-caps tracking-widest font-semibold text-on-surface-variant">Active Reports</span>
+<h3 class="text-4xl font-semibold text-primary">1,284</h3>
+<p class="text-[10px] text-on-surface-variant mt-1 flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px] text-green-600" data-icon="trending_up">trending_up</span>
+                        +12% from last month
+                    </p>
+</div>
+<div class="bg-surface-container-lowest p-6 rounded-xl flex flex-col justify-between min-h-[140px]">
+<span class="label-md all-caps tracking-widest font-semibold text-on-surface-variant">Storage Utilized</span>
+<h3 class="text-4xl font-semibold text-primary">42.8<span class="text-xl">GB</span></h3>
+<div class="w-full bg-surface-container h-1 rounded-full overflow-hidden mt-2">
+<div class="bg-primary h-full w-[42%]"></div>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-6 rounded-xl flex flex-col justify-between min-h-[140px]">
+<span class="label-md all-caps tracking-widest font-semibold text-on-surface-variant">Last Generation</span>
+<h3 class="text-xl font-semibold text-primary">Daily Audit_042</h3>
+<p class="text-[10px] text-on-surface-variant mt-1">2 hours ago • Success</p>
+</div>
+<div class="bg-surface-container-low p-6 rounded-xl flex flex-col justify-center items-center border border-dashed border-outline-variant/30 group cursor-pointer hover:border-primary/30 transition-colors">
+<span class="material-symbols-outlined text-primary mb-2 text-3xl group-hover:scale-110 transition-transform" data-icon="add_circle">add_circle</span>
+<p class="label-md all-caps tracking-widest font-semibold text-primary">New Query</p>
+</div>
+</div>
+<!-- Filters Section -->
+<div class="bg-surface-container-low p-6 rounded-xl">
+<div class="flex flex-wrap items-center gap-6">
+<div class="flex flex-col gap-2">
+<label class="label-md all-caps tracking-widest font-semibold text-on-surface-variant">Report Frequency</label>
+<div class="flex bg-surface-container-lowest p-1 rounded-lg">
+<button class="px-4 py-1.5 text-xs font-semibold rounded-md bg-primary text-white">All</button>
+<button class="px-4 py-1.5 text-xs font-semibold rounded-md text-on-surface-variant hover:bg-surface-container-high">Daily</button>
+<button class="px-4 py-1.5 text-xs font-semibold rounded-md text-on-surface-variant hover:bg-surface-container-high">Weekly</button>
+<button class="px-4 py-1.5 text-xs font-semibold rounded-md text-on-surface-variant hover:bg-surface-container-high">Monthly</button>
+</div>
+</div>
+<div class="flex flex-col gap-2">
+<label class="label-md all-caps tracking-widest font-semibold text-on-surface-variant">Date Range</label>
+<div class="flex items-center gap-3 bg-surface-container-lowest px-4 py-2 rounded-lg border border-transparent hover:border-outline-variant/20 transition-all">
+<span class="material-symbols-outlined text-sm text-slate-400" data-icon="calendar_month">calendar_month</span>
+<input class="bg-transparent border-none p-0 text-sm focus:ring-0 w-48 text-primary font-medium" type="text" value="Oct 01 - Oct 31, 2023"/>
+</div>
+</div>
+<div class="flex flex-col gap-2">
+<label class="label-md all-caps tracking-widest font-semibold text-on-surface-variant">Status</label>
+<select class="bg-surface-container-lowest px-4 py-2 rounded-lg border-none text-sm focus:ring-0 text-primary font-medium min-w-[140px]">
+<option>All Statuses</option>
+<option>Completed</option>
+<option>Processing</option>
+<option>Failed</option>
+</select>
+</div>
+<div class="flex flex-col gap-2 ml-auto">
+<label class="label-md all-caps tracking-widest font-semibold text-on-surface-variant"> </label>
+<button class="flex items-center gap-2 px-4 py-2 text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="filter_list">filter_list</span>
+<span class="text-sm font-medium">Advanced Filters</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Reports Table -->
+<div class="bg-surface-container-lowest rounded-xl overflow-hidden shadow-sm">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low/50">
+<th class="px-6 py-5 label-md all-caps tracking-widest font-semibold text-on-surface-variant">Report Name</th>
+<th class="px-6 py-5 label-md all-caps tracking-widest font-semibold text-on-surface-variant">Frequency</th>
+<th class="px-6 py-5 label-md all-caps tracking-widest font-semibold text-on-surface-variant">Generation Date</th>
+<th class="px-6 py-5 label-md all-caps tracking-widest font-semibold text-on-surface-variant">Size</th>
+<th class="px-6 py-5 label-md all-caps tracking-widest font-semibold text-on-surface-variant">Status</th>
+<th class="px-6 py-5 label-md all-caps tracking-widest font-semibold text-on-surface-variant text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-container">
+<tr class="group hover:bg-surface-container-low/30 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center text-red-600">
+<span class="material-symbols-outlined" data-icon="picture_as_pdf">picture_as_pdf</span>
+</div>
+<div>
+<p class="text-sm font-semibold text-primary">Daily_Logistics_Summary_20231024</p>
+<p class="text-[10px] text-on-surface-variant">Author: System Automator</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 bg-surface-container-high rounded text-[10px] font-bold text-on-surface-variant">DAILY</span>
+</td>
+<td class="px-6 py-4 text-sm text-on-surface">Oct 24, 2023 06:00 AM</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant font-mono">2.4 MB</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-1.5 text-green-700">
+<div class="w-1.5 h-1.5 rounded-full bg-green-600"></div>
+<span class="text-xs font-medium">Ready</span>
+</div>
+</td>
+<td class="px-6 py-4 text-right">
+<div class="flex items-center justify-end gap-2">
+<button class="p-2 text-slate-400 hover:text-primary transition-colors"><span class="material-symbols-outlined text-[20px]" data-icon="visibility">visibility</span></button>
+<button class="flex items-center gap-2 px-3 py-1.5 bg-primary-container/10 text-primary-container text-xs font-bold rounded-lg hover:bg-primary-container hover:text-white transition-all">
+<span class="material-symbols-outlined text-[16px]" data-icon="download">download</span>
+                                        Download
+                                    </button>
+</div>
+</td>
+</tr>
+<tr class="group hover:bg-surface-container-low/30 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-green-50 flex items-center justify-center text-green-600">
+<span class="material-symbols-outlined" data-icon="table_chart">table_chart</span>
+</div>
+<div>
+<p class="text-sm font-semibold text-primary">Weekly_Performance_Audit_W42</p>
+<p class="text-[10px] text-on-surface-variant">Author: Analytics Engine</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 bg-blue-50 text-blue-700 rounded text-[10px] font-bold">WEEKLY</span>
+</td>
+<td class="px-6 py-4 text-sm text-on-surface">Oct 22, 2023 11:45 PM</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant font-mono">14.8 MB</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-1.5 text-green-700">
+<div class="w-1.5 h-1.5 rounded-full bg-green-600"></div>
+<span class="text-xs font-medium">Ready</span>
+</div>
+</td>
+<td class="px-6 py-4 text-right">
+<div class="flex items-center justify-end gap-2">
+<button class="p-2 text-slate-400 hover:text-primary transition-colors"><span class="material-symbols-outlined text-[20px]" data-icon="visibility">visibility</span></button>
+<button class="flex items-center gap-2 px-3 py-1.5 bg-primary-container/10 text-primary-container text-xs font-bold rounded-lg hover:bg-primary-container hover:text-white transition-all">
+<span class="material-symbols-outlined text-[16px]" data-icon="download">download</span>
+                                        Download
+                                    </button>
+</div>
+</td>
+</tr>
+<tr class="group hover:bg-surface-container-low/30 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+</div>
+<div>
+<p class="text-sm font-semibold text-primary">Monthly_Fleet_Efficiency_Sep23</p>
+<p class="text-[10px] text-on-surface-variant">Author: Fleet Manager</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 bg-amber-50 text-amber-700 rounded text-[10px] font-bold">MONTHLY</span>
+</td>
+<td class="px-6 py-4 text-sm text-on-surface">Oct 01, 2023 00:05 AM</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant font-mono">156.2 MB</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-1.5 text-blue-700">
+<div class="w-1.5 h-1.5 rounded-full bg-blue-600"></div>
+<span class="text-xs font-medium">Archived</span>
+</div>
+</td>
+<td class="px-6 py-4 text-right">
+<div class="flex items-center justify-end gap-2">
+<button class="p-2 text-slate-400 hover:text-primary transition-colors"><span class="material-symbols-outlined text-[20px]" data-icon="visibility">visibility</span></button>
+<button class="flex items-center gap-2 px-3 py-1.5 bg-primary-container/10 text-primary-container text-xs font-bold rounded-lg hover:bg-primary-container hover:text-white transition-all">
+<span class="material-symbols-outlined text-[16px]" data-icon="download">download</span>
+                                        Download
+                                    </button>
+</div>
+</td>
+</tr>
+<tr class="group hover:bg-surface-container-low/30 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center text-red-600">
+<span class="material-symbols-outlined" data-icon="picture_as_pdf">picture_as_pdf</span>
+</div>
+<div>
+<p class="text-sm font-semibold text-primary">Route_Optimization_Review_V4</p>
+<p class="text-[10px] text-on-surface-variant">Author: AI Planner</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 bg-surface-container-high rounded text-[10px] font-bold text-on-surface-variant">DAILY</span>
+</td>
+<td class="px-6 py-4 text-sm text-on-surface">Oct 24, 2023 09:12 AM</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant font-mono">--</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-1.5 text-primary animate-pulse">
+<div class="w-1.5 h-1.5 rounded-full bg-primary"></div>
+<span class="text-xs font-medium">Processing</span>
+</div>
+</td>
+<td class="px-6 py-4 text-right">
+<div class="flex items-center justify-end gap-2">
+<button class="p-2 text-slate-300 cursor-not-allowed" disabled=""><span class="material-symbols-outlined text-[20px]" data-icon="visibility">visibility</span></button>
+<button class="flex items-center gap-2 px-3 py-1.5 bg-slate-100 text-slate-400 text-xs font-bold rounded-lg cursor-not-allowed" disabled="">
+<span class="material-symbols-outlined text-[16px]" data-icon="sync">sync</span>
+                                        Generating
+                                    </button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+<div class="px-6 py-4 bg-surface-container-low/30 flex items-center justify-between border-t border-surface-container">
+<p class="text-xs text-on-surface-variant">Showing 1 to 4 of 1,284 entries</p>
+<div class="flex gap-1">
+<button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container-high text-on-surface-variant"><span class="material-symbols-outlined text-sm" data-icon="chevron_left">chevron_left</span></button>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg bg-primary text-white text-xs font-bold">1</button>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container-high text-on-surface-variant text-xs">2</button>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container-high text-on-surface-variant text-xs">3</button>
+<span class="px-2 flex items-center text-on-surface-variant">...</span>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container-high text-on-surface-variant text-xs">32</button>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container-high text-on-surface-variant"><span class="material-symbols-outlined text-sm" data-icon="chevron_right">chevron_right</span></button>
+</div>
+</div>
+</div>
+<!-- Contextual Help / Feature Discovery -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-12">
+<div class="bg-gradient-to-br from-primary to-primary-container rounded-2xl p-8 text-white relative overflow-hidden group">
+<div class="relative z-10">
+<span class="material-symbols-outlined text-4xl mb-4 opacity-50" data-icon="auto_awesome_motion">auto_awesome_motion</span>
+<h4 class="text-xl font-bold mb-2">Automate Your Intelligence</h4>
+<p class="text-blue-100/80 mb-6 text-sm max-w-sm">Schedule recurrent report generation to be delivered directly to your stakeholders' email every morning.</p>
+<button class="px-6 py-2.5 bg-white text-primary font-bold rounded-xl text-sm hover:bg-blue-50 transition-colors">Setup Schedule</button>
+</div>
+<span class="material-symbols-outlined absolute -right-8 -bottom-8 text-[200px] opacity-10 group-hover:scale-110 transition-transform duration-700" data-icon="insights">insights</span>
+</div>
+<div class="bg-surface-container-low rounded-2xl p-8 flex gap-6 items-start">
+<div class="w-14 h-14 shrink-0 rounded-2xl bg-surface-container-lowest flex items-center justify-center text-secondary shadow-sm">
+<span class="material-symbols-outlined text-3xl" data-icon="security">security</span>
+</div>
+<div>
+<h4 class="text-lg font-bold text-primary mb-1">Data Retention Policy</h4>
+<p class="text-sm text-on-surface-variant mb-4">Daily reports are kept for 90 days. Weekly and Monthly audits are archived indefinitely in compliance with ISO 27001 logistics standards.</p>
+<a class="text-sm font-bold text-secondary flex items-center gap-1 hover:underline" href="#">
+                            View Compliance Details
+                            <span class="material-symbols-outlined text-[14px]" data-icon="arrow_forward">arrow_forward</span>
+</a>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Contextual FAB -->
+<button class="fixed bottom-8 right-8 w-14 h-14 bg-gradient-to-br from-secondary to-blue-800 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all group z-50">
+<span class="material-symbols-outlined text-2xl" data-icon="add">add</span>
+<span class="absolute right-full mr-4 px-3 py-1.5 bg-inverse-surface text-inverse-on-surface text-xs rounded-lg opacity-0 group-hover:opacity-100 whitespace-nowrap transition-opacity pointer-events-none">New Audit</span>
+</button>
+</body></html>

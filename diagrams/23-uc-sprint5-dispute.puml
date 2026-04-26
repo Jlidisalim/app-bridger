@@ -1,0 +1,56 @@
+@startuml
+title Raffinement — Cas d'Utilisation « Ouvrir un Litige »
+
+left to right direction
+skinparam actorStyle awesome
+
+actor "Utilisateur\n(Sender/Traveler)" as User
+actor "Administrateur" as Admin
+
+rectangle "Gestion des Litiges" {
+  usecase "Ouvrir un litige\nsur un deal" as UC1
+  usecase "Choisir la catégorie\ndu problème" as UC2
+  usecase "Décrire le\nproblème" as UC3
+  usecase "Joindre des\npreuves (photos)" as UC4
+  usecase "Soumettre le\nlitige" as UC5
+  usecase "Consulter les\nlitiges en cours" as UC6
+  usecase "Examiner les\npreuves (Admin)" as UC7
+  usecase "Contacter les\nparties (Admin)" as UC8
+  usecase "Rendre une décision\n(Admin)" as UC9
+  usecase "Effectuer un\nremboursement" as UC10
+  usecase "Fermer le litige" as UC11
+}
+
+User --> UC1
+User --> UC6
+
+Admin --> UC6
+Admin --> UC7
+Admin --> UC8
+Admin --> UC9
+
+UC1 ..> UC2 : <<include>>
+UC1 ..> UC3 : <<include>>
+UC1 ..> UC4 : <<extend>>
+UC3 ..> UC5 : <<include>>
+
+UC9 ..> UC10 : <<extend>>
+UC9 ..> UC11 : <<include>>
+
+note right of UC2
+  Catégories :
+  - Colis endommagé
+  - Colis non livré
+  - Colis ne correspondant
+    pas à la description
+  - Fraude / arnaque
+  - Autre
+end note
+
+note bottom of UC9
+  Statuts du litige :
+  OPEN → UNDER_REVIEW
+  → RESOLVED → CLOSED
+end note
+
+@enduml

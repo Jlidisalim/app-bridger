@@ -1,0 +1,102 @@
+@startuml
+title Diagramme de Cas d'Utilisation Global — Bridger
+
+left to right direction
+skinparam actorStyle awesome
+skinparam packageStyle rectangle
+
+actor "Expéditeur\n(Sender)" as Sender
+actor "Voyageur\n(Traveler)" as Traveler
+actor "Administrateur" as Admin
+actor "Utilisateur" as User
+
+Sender -|> User
+Traveler -|> User
+
+rectangle "Plateforme Bridger" {
+
+  ' === Fonctionnalités communes (Utilisateur) ===
+  package "Authentification & KYC" {
+    usecase "S'inscrire via\nWhatsApp OTP" as UC_Register
+    usecase "S'authentifier" as UC_Login
+    usecase "Vérifier l'identité\n(KYC + Face IA)" as UC_KYC
+  }
+
+  package "Fonctionnalités communes" {
+    usecase "Gérer le profil" as UC_Profile
+    usecase "Consulter le\ntableau de bord" as UC_Dashboard
+    usecase "Utiliser la messagerie\nen temps réel" as UC_Chat
+    usecase "Recevoir des\nnotifications push" as UC_Notif
+    usecase "Consulter le\nportefeuille (Wallet)" as UC_Wallet
+    usecase "Évaluer un\nutilisateur" as UC_Review
+    usecase "Ouvrir un litige" as UC_Dispute
+  }
+
+  ' === Fonctionnalités Expéditeur ===
+  package "Espace Expéditeur" {
+    usecase "Créer une annonce\nde colis" as UC_CreateDeal
+    usecase "Rechercher des\nvoyageurs disponibles" as UC_SearchTravelers
+    usecase "Suivre la livraison\n(Tracking)" as UC_Track
+    usecase "Confirmer la livraison\nvia QR code" as UC_ConfirmDelivery
+    usecase "Payer en séquestre\n(Escrow Stripe)" as UC_Pay
+  }
+
+  ' === Fonctionnalités Voyageur ===
+  package "Espace Voyageur" {
+    usecase "Créer un trajet" as UC_CreateTrip
+    usecase "Consulter les annonces\nde colis disponibles" as UC_BrowseDeals
+    usecase "Accepter un deal" as UC_AcceptDeal
+    usecase "Confirmer la prise\nen charge (QR)" as UC_PickupQR
+    usecase "Confirmer la remise\n(QR)" as UC_DeliverQR
+    usecase "Recevoir le paiement\ndans le wallet" as UC_ReceivePay
+  }
+
+  ' === Fonctionnalités Admin ===
+  package "Espace Administrateur" {
+    usecase "Gérer les utilisateurs" as UC_ManageUsers
+    usecase "Valider les KYC\ncontestés" as UC_ValidateKYC
+    usecase "Arbitrer les litiges" as UC_ArbitratDispute
+    usecase "Consulter les\nstatistiques globales" as UC_Stats
+  }
+}
+
+' === Liens Utilisateur (communs) ===
+User --> UC_Register
+User --> UC_Login
+User --> UC_KYC
+User --> UC_Profile
+User --> UC_Dashboard
+User --> UC_Chat
+User --> UC_Notif
+User --> UC_Wallet
+User --> UC_Review
+User --> UC_Dispute
+
+' === Liens Expéditeur ===
+Sender --> UC_CreateDeal
+Sender --> UC_SearchTravelers
+Sender --> UC_Track
+Sender --> UC_ConfirmDelivery
+Sender --> UC_Pay
+
+' === Liens Voyageur ===
+Traveler --> UC_CreateTrip
+Traveler --> UC_BrowseDeals
+Traveler --> UC_AcceptDeal
+Traveler --> UC_PickupQR
+Traveler --> UC_DeliverQR
+Traveler --> UC_ReceivePay
+
+' === Liens Admin ===
+Admin --> UC_ManageUsers
+Admin --> UC_ValidateKYC
+Admin --> UC_ArbitratDispute
+Admin --> UC_Stats
+
+' === Relations include/extend ===
+UC_Login ..> UC_Register : <<extend>>
+UC_Register ..> UC_KYC : <<include>>
+UC_ConfirmDelivery ..> UC_Pay : <<include>>
+UC_DeliverQR ..> UC_ReceivePay : <<include>>
+
+@enduml

@@ -1,0 +1,574 @@
+// Bridger Database Schema
+// PostgreSQL (with pgvector extension for face embeddings)
+//
+// ──────────────────────────────────────────────────────────────────────────────
+// pgvector MIGRATION PATH
+// ──────────────────────────────────────────────────────────────────────────────
+// Face embeddings are currently stored as JSON strings (faceEmbedding String?).
+// To migrate to pgvector for fast ANN search:
+//
+// Step 1 — Enable the pgvector extension in your PostgreSQL instance:
+//   CREATE EXTENSION IF NOT EXISTS vector;
+//
+// Step 2 — Add to the generator block:
+//   previewFeatures = ["postgresqlExtensions"]
+//
+// Step 3 — Add to the datasource block:
+//   extensions = [pgvector(map: "vector")]
+//
+// Step 4 — Replace the faceEmbedding field on User with:
+//   faceEmbedding   Unsupported("vector(512)")?
+//
+// Step 5 — After running `prisma migrate dev`, add the HNSW index manually in
+//          the generated migration SQL file (Prisma does not yet generate it):
+//   CREATE INDEX ON "User" USING hnsw ("faceEmbedding" vector_cosine_ops);
+//
+// Step 6 — Update faceVerificationService.ts to use raw SQL for similarity
+//          search: prisma.$queryRaw`SELECT id FROM "User" ORDER BY
+//          "faceEmbedding" <=> ${queryVector}::vector LIMIT 10`
+//
+// Until pgvector is enabled, the JSON-string fallback is fully functional;
+// it just requires a full table scan instead of an index lookup.
+// ──────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============= MODELS =============
+
+model User {
+  id            String    @id @default(cuid())
+  phone         String    @unique
+  name          String?
+  avatar        String?
+  profilePhoto  String?
+  pushToken            String?
+  pushTokenUpdatedAt   DateTime?
+  stripeConnectAccountId String?              // Stripe Connect for payouts
+  stripeAccountStatus    String?              // NOT_STARTED | PENDING | ACTIVE | RESTRICTED
+  kycStatus     String    @default("PENDING")  // PENDING, SUBMITTED, APPROVED, REJECTED
+  // FIX: Add indexes for frequently queried KYC/face columns
+  kycDocumentsLegacy  String?   // JSON string stored as text (legacy — superseded by KycDocument relation)
+
+  // Face verification
+  faceEmbedding        String?                      // 512-d ArcFace embedding stored as JSON (pgvector in production)
+  faceVerificationStatus String  @default("PENDING")  // PENDING, VERIFIED, FAILED
+  faceVerifiedAt       DateTime?
+  faceConfidenceScore  Float?
+  idDocumentNumber     String?                      // Extracted from ID card via OCR
+
+  isAdmin       Boolean   @default(false)
+  flagged       Boolean   @default(false)  // admin-flagged for review
+  banned        Boolean   @default(false)  // account suspended by admin
+  lastLoginAt   DateTime?                  // populated on every successful auth
+  reasonForBan  String?                    // free-text reason stored when banned
+  email         String?
+  verified      Boolean   @default(false)
+  walletBalance Float     @default(0)
+  rating        Float     @default(0)
+  completionRate Float    @default(0)
+  totalDeals    Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  sessions       Session[]
+  sentDeals      Deal[]            @relation("DealSender")
+  traveledDeals  Deal[]            @relation("DealTraveler")
+  trips          Trip[]
+  transactions   Transaction[]
+  notifications  Notification[]
+  chatRooms      ChatParticipant[]
+  sentMessages   ChatMessage[]
+  disputesFiled  Dispute[]         @relation("DisputeFiler")
+  disputesAgainst Dispute[]        @relation("DisputeAgainst")
+  reviewsGiven   Review[]          @relation("ReviewAuthor")
+  reviewsReceived Review[]         @relation("ReviewTarget")
+  notificationSettings NotificationSettings?
+  wallet         Wallet?
+  trustScore     TrustScore?
+  faceScans      FaceScan[]
+  auditLogs      AuditLog[]
+  kycDocuments   KycDocument[]
+
+  @@index([kycStatus])
+  @@index([faceVerificationStatus])
+  @@index([isAdmin])
+  @@index([banned])
+  @@index([flagged])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  token        String   @unique
+  refreshToken String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([token])
+  @@index([refreshToken])
+}
+
+model OTP {
+  id        String   @id @default(cuid())
+  phone     String
+  code      String
+  attempts  Int      @default(0)
+  verified  Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([phone, verified])
+}
+
+model Deal {
+  id             String    @id @default(cuid())
+  senderId       String
+  sender         User      @relation("DealSender", fields: [senderId], references: [id], onDelete: Restrict)
+  travelerId     String?
+  traveler       User?     @relation("DealTraveler", fields: [travelerId], references: [id], onDelete: SetNull)
+  title          String
+  description    String?
+  fromCity       String
+  toCity         String
+  fromCountry    String
+  toCountry      String
+  fromLat        Float?
+  fromLng        Float?
+  toLat          Float?
+  toLng          Float?
+  packageSize    String    // SMALL, MEDIUM, LARGE, EXTRA_LARGE
+  isFragile      Boolean   @default(false)
+  itemValue      Float?    // Declared value for insurance purposes
+  weight         Float?
+  price          Float
+  currency       String    @default("USD")
+  status         String    @default("OPEN")  // OPEN, MATCHED, PICKED_UP, IN_TRANSIT, DELIVERED, COMPLETED, CANCELLED, DISPUTED
+  pickupDate     DateTime?
+  deliveryDate   DateTime?
+  images         String?   // JSON string stored as text
+  qrCode         String?
+  qrSecret       String?
+  receiverCode   String?   // 6-digit code given to receiver; traveler scans it to confirm delivery
+  receiverName   String?   // Full name of the receiver (entered by sender in step 4)
+  receiverPhone  String?   // Phone number of the receiver (entered by sender in step 4)
+  // Cancellation audit — populated when status transitions to CANCELLED
+  cancelledById   String?   // user id of whoever cancelled (sender or traveler)
+  cancelledByRole String?   // 'SENDER' or 'TRAVELER'
+  cancelReason    String?
+  cancelEvidence  String?   // JSON array of media URLs (images/videos)
+  cancelledAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  // Relations
+  trackingEvents TrackingEvent[]
+  transactions   Transaction[]
+  chatRoom       ChatRoom?
+  disputes       Dispute[]
+  reviews        Review[]
+  customsDeclarations CustomsDeclaration[]
+  trackingSession TrackingSession?
+  positionLogs    PositionLog[]
+
+  @@index([status])
+  @@index([fromCity, toCity])
+  @@index([senderId])
+  @@index([travelerId])
+  @@index([createdAt])
+  @@index([price])
+}
+
+// Live traveler tracking session — one per Deal.
+// mode 'gps' = phone GPS streaming, mode 'flight' = OpenSky polling, mode 'idle' = inactive.
+model TrackingSession {
+  id              String   @id @default(cuid())
+  dealId          String   @unique
+  deal            Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  mode            String   @default("idle") // idle | gps | flight
+
+  // GPS state
+  gpsActive       Boolean  @default(false)
+  gpsLat          Float?
+  gpsLng          Float?
+  gpsAccuracyM    Float?
+  gpsHeadingDeg   Float?
+  gpsSpeedMs      Float?
+  gpsAltitudeM    Float?
+  gpsUpdatedAt    DateTime?
+  gpsLostAt       DateTime?
+
+  // Flight state
+  flightActive       Boolean  @default(false)
+  flightCallsign     String?
+  flightIcao24       String?
+  flightLat          Float?
+  flightLng          Float?
+  flightAltitudeM    Float?
+  flightHeadingDeg   Float?
+  flightVelocityMs   Float?
+  flightVerticalRate Float?
+  flightOnGround     Boolean?
+  flightStale        Boolean?
+  flightUpdatedAt    DateTime?
+  flightLastPollAt   DateTime?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([mode])
+  @@index([gpsActive])
+  @@index([flightActive])
+}
+
+// Append-only history of positions for route replay.
+model PositionLog {
+  id          BigInt   @id @default(autoincrement())
+  dealId      String
+  deal        Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  mode        String   // gps | flight
+  lat         Float
+  lng         Float
+  altitudeM   Float?
+  headingDeg  Float?
+  speedMs     Float?
+  source      String?  // device | opensky | interpolated
+  loggedAt    DateTime @default(now())
+
+  @@index([dealId, loggedAt])
+}
+
+model TrackingEvent {
+  id        String   @id @default(cuid())
+  dealId    String
+  deal      Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  status    String
+  location  String?
+  note      String?
+  actor     String?
+  createdAt DateTime @default(now())
+
+  @@index([dealId, createdAt])
+}
+
+model Transaction {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dealId    String?
+  deal      Deal?    @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  type      String   // DEPOSIT, WITHDRAWAL, ESCROW_HOLD, ESCROW_RELEASE, PAYMENT, REFUND
+  amount    Float
+  currency  String   @default("USD")
+  status    String   @default("PENDING")  // PENDING, COMPLETED, FAILED, REFUNDED
+  stripeId  String?
+  metadata  String?  // JSON string stored as text
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([stripeId])
+}
+
+model ChatRoom {
+  id        String            @id @default(cuid())
+  // dealId is nullable so that rooms can be created for Trip postings (tripId)
+  // as well as for matched Deals.  Exactly one of dealId / tripId must be set.
+  dealId    String?           @unique
+  deal      Deal?             @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  tripId    String?           @unique
+  trip      Trip?             @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  participants ChatParticipant[]
+  messages  ChatMessage[]
+  createdAt DateTime          @default(now())
+}
+
+model ChatParticipant {
+  id         String   @id @default(cuid())
+  chatRoomId String
+  chatRoom   ChatRoom @relation(fields: [chatRoomId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt   DateTime @default(now())
+
+  @@unique([chatRoomId, userId])
+}
+
+model ChatMessage {
+  id         String   @id @default(cuid())
+  chatRoomId String
+  chatRoom   ChatRoom @relation(fields: [chatRoomId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  senderId   String?
+  sender     User?    @relation(fields: [senderId], references: [id], onDelete: SetNull)
+  content    String
+  type       String   @default("TEXT")  // TEXT, IMAGE, SYSTEM
+  readAt     DateTime?
+  createdAt  DateTime @default(now())
+  replyToId  String?
+  replyTo    ChatMessage? @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies    ChatMessage[] @relation("MessageReplies")
+
+  @@index([chatRoomId, createdAt])
+  @@index([replyToId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  title     String
+  body      String
+  type      String
+  data      String?  // JSON string stored as text
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, read, createdAt])
+}
+
+model Trip {
+  id            String    @id @default(cuid())
+  travelerId    String
+  traveler      User      @relation(fields: [travelerId], references: [id], onDelete: Cascade)
+  fromCity      String
+  toCity        String
+  fromCountry   String
+  toCountry     String
+  departureDate DateTime?
+  departureTime String?
+  flightNumber  String?
+  maxWeight     Float     @default(1.0)
+  price         Float
+  currency      String    @default("USD")
+  negotiable    Boolean   @default(false)
+  status        String    @default("OPEN")  // OPEN, MATCHED, COMPLETED, CANCELLED
+  // Cancellation audit — populated when status transitions to CANCELLED
+  cancelledById   String?   // user id of whoever cancelled
+  cancelledByRole String?   // 'TRAVELER' or 'SENDER'
+  cancelReason    String?
+  cancelEvidence  String?   // JSON array of media URLs (images/videos)
+  cancelledAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Chat room opened for this trip posting (sender messages traveler before matching)
+  chatRoom      ChatRoom?
+
+  @@index([travelerId])
+  @@index([fromCity, toCity])
+  @@index([status])
+  @@index([departureDate])
+}
+
+model Dispute {
+  id            String    @id @default(cuid())
+  dealId        String
+  deal          Deal      @relation(fields: [dealId], references: [id], onDelete: Restrict)
+  filerId       String
+  filer         User      @relation("DisputeFiler", fields: [filerId], references: [id], onDelete: Restrict)
+  againstId     String
+  against       User      @relation("DisputeAgainst", fields: [againstId], references: [id], onDelete: Restrict)
+  reason        String
+  description   String?
+  evidence      String?   // JSON string stored as text (legacy — see DisputeEvidence)
+  status        String    @default("OPENED")  // OPENED, EVIDENCE_SUBMITTED, ADMIN_REVIEWING, RESOLVED_FILER_WIN, RESOLVED_AGAINST_WIN, RESOLVED_SPLIT, CLOSED
+  resolution    String?
+  resolvedById  String?   // admin user ID who resolved it
+  slaDeadline   DateTime  @default(dbgenerated("NOW() + interval '72 hours'"))
+  evidences     DisputeEvidence[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([dealId])
+  @@index([filerId])
+  @@index([status])
+  @@index([slaDeadline])
+}
+
+model DisputeEvidence {
+  id          String   @id @default(cuid())
+  disputeId   String
+  dispute     Dispute  @relation(fields: [disputeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  uploaderId  String
+  type        String   // PHOTO, VIDEO, DOCUMENT, TEXT
+  url         String?
+  content     String?
+  createdAt   DateTime @default(now())
+
+  @@index([disputeId])
+}
+
+model Review {
+  id          String   @id @default(cuid())
+  dealId      String
+  deal        Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  authorId    String?
+  author      User?    @relation("ReviewAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  targetId    String?
+  target      User?    @relation("ReviewTarget", fields: [targetId], references: [id], onDelete: SetNull)
+  rating      Int      // 1-5
+  comment     String?
+  // ML enrichment fields
+  sentiment   String?  // positive | neutral | negative
+  fraudScore  Float?   // 0.0 – 1.0
+  flagged     Boolean  @default(false)
+  status      String   @default("approved")  // approved | pending_moderation
+  createdAt   DateTime @default(now())
+
+  @@index([dealId, authorId])
+  @@index([targetId])
+  @@index([authorId])
+  @@index([flagged])
+  @@index([status])
+}
+
+model WhatsappLog {
+  id        String   @id @default(cuid())
+  to        String
+  message   String
+  status    String   @default("sent")  // sent | failed | retrying | pending
+  error     String?
+  retries   Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+}
+
+model PricingDataPoint {
+  id        String   @id @default(cuid())
+  distance  Float    // km
+  weight    Float    // kg
+  volume    Float    @default(0)  // cm³
+  urgent    Boolean  @default(false)
+  price     Float
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model NotificationSettings {
+  id         String  @id @default(cuid())
+  userId     String  @unique
+  user       User    @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  deals      Boolean @default(true)
+  messages   Boolean @default(true)
+  payments   Boolean @default(true)
+  promotions Boolean @default(true)
+}
+
+model Wallet {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  balance          Float    @default(0)
+  pendingBalance   Float    @default(0)
+  availableBalance Float    @default(0)
+  currency         String   @default("USD")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model CustomsDeclaration {
+  id              String   @id @default(cuid())
+  dealId          String
+  deal            Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  declarationType String   // PERSONAL, COMMERCIAL, GIFT
+  items           String   // JSON string
+  declaredValue   Float
+  currency        String   @default("USD")
+  exportCountry   String
+  importCountry   String
+  status          String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([dealId])
+}
+
+model FaceScan {
+  id                    String   @id @default(cuid())
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  scanType              String   // REGISTRATION, VERIFICATION
+  score                 Float?
+  verified              Boolean  @default(false)
+  livenessScore         Float?
+  confidenceScore       Float?
+  failureReason         String?
+  createdAt             DateTime @default(now())
+
+  @@index([userId])
+  // FIX 23: Add indexes for columns used in WHERE and ORDER BY clauses
+  @@index([scanType])
+  @@index([verified])
+  @@index([userId, scanType])    // composite: "get all liveness scans for user"
+  @@index([createdAt])           // for time-range queries
+}
+
+model TrustScore {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  score          Float    @default(50)
+  scoreType      String   @default("STANDARD") // STANDARD, PREMIUM, NEW
+  transactionCount Int    @default(0)
+  completionPct  Float    @default(0)
+  totalLinks     Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model AdminTask {
+  id          String   @id @default(cuid())
+  type        String   // DISPUTE_REVIEW, KYC_REVIEW, FRAUD_FLAG, etc.
+  referenceId String   // e.g. disputeId or kycDocumentId
+  status      String   @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED
+  assignedTo  String?  // admin userId
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status, type])
+  @@index([assignedTo])
+  @@index([createdAt])
+}
+
+model KycDocument {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  documentType String   // PASSPORT | ID_CARD | DRIVING_LICENSE
+  frontUrl     String
+  backUrl      String?
+  status       String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  entityId   String?
+  entityType String   // USER, DEAL, TRANSACTION, DISPUTE, etc.
+  action     String   // CREATE, UPDATE, DELETE, LOGIN, LOGOUT, etc.
+  ipAddress  String?
+  metadata   String?  // JSON string
+  recordedAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([recordedAt])
+}

@@ -1,0 +1,40 @@
+@startuml
+title Raffinement — Cas d'Utilisation « S'inscrire via WhatsApp OTP »
+
+left to right direction
+skinparam actorStyle awesome
+
+actor "Utilisateur" as User
+actor "Service\nWhatsApp\n(Baileys)" as WA
+
+rectangle "Inscription via WhatsApp OTP" {
+  usecase "Saisir le numéro\nde téléphone" as UC1
+  usecase "Valider le format\ndu numéro" as UC2
+  usecase "Envoyer le code\nOTP via WhatsApp" as UC3
+  usecase "Saisir le code\nOTP (6 chiffres)" as UC4
+  usecase "Vérifier le\ncode OTP" as UC5
+  usecase "Créer la session\nJWT" as UC6
+  usecase "Rediriger vers\nKYC (nouveau)" as UC7
+  usecase "Rediriger vers\nHome (existant)" as UC8
+  usecase "Afficher erreur\n(code invalide)" as UC9
+  usecase "Afficher erreur\n(tentatives max)" as UC10
+}
+
+User --> UC1
+User --> UC4
+UC1 ..> UC2 : <<include>>
+UC2 ..> UC3 : <<include>>
+UC3 --> WA
+UC4 ..> UC5 : <<include>>
+UC5 ..> UC6 : <<include>>
+UC6 ..> UC7 : <<extend>>
+UC6 ..> UC8 : <<extend>>
+UC5 ..> UC9 : <<extend>>
+UC5 ..> UC10 : <<extend>>
+
+note bottom of UC5
+  Max 3 tentatives
+  Expiration : 5 minutes
+end note
+
+@enduml

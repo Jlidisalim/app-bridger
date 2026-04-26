@@ -1,0 +1,12 @@
+node_modules
+backend/node_modules
+baileys-server/node_modules
+face-verification-service
+*.docx
+diagrams
+__tests__
+android/build
+android/.gradle
+ios/Pods
+ios/build
+.git

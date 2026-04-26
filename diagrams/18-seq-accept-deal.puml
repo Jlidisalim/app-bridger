@@ -1,0 +1,70 @@
+@startuml
+title Diagramme de Séquence — Acceptation d'un Deal par le Voyageur
+
+skinparam sequenceArrowThickness 2
+
+actor "Voyageur" as Traveler
+actor "Expéditeur" as Sender
+participant "App\nVoyageur" as AppT
+participant "App\nExpéditeur" as AppS
+participant "Backend API\n(Express.js)" as Backend
+participant "Stripe" as Stripe
+database "Base de\nDonnées" as DB
+participant "Socket.io" as WS
+
+== Phase 1 : Exploration et consultation ==
+
+Traveler -> AppT : Ouvrir Explore
+AppT -> Backend : GET /api/deals\n?status=OPEN&fromCity=X&toCity=Y
+Backend -> DB : Rechercher les deals\n(OPEN, route matching)
+Backend --> AppT : 200 OK { deals: [...] }
+AppT --> Traveler : Liste des annonces
+
+Traveler -> AppT : Cliquer sur un deal
+AppT -> Backend : GET /api/deals/:dealId
+Backend -> DB : Récupérer deal\n+ profil sender
+Backend --> AppT : { deal, sender }
+AppT --> Traveler : Détails du colis\n+ profil expéditeur
+
+== Phase 2 : Acceptation du deal ==
+
+Traveler -> AppT : Cliquer "Accepter ce deal"
+AppT -> Backend : POST /api/deals/:dealId/accept\n{ travelerId }
+
+Backend -> DB : Vérifier deal\n(status == OPEN)
+Backend -> DB : Vérifier voyageur\n(KYC approved, verified)
+
+alt Deal disponible et voyageur vérifié
+
+  ' Créer le paiement escrow
+  Backend -> Stripe : Créer PaymentIntent\n(montant = deal.price,\ncapture_method = manual)
+  Stripe --> Backend : { paymentIntentId }
+
+  Backend -> DB : Mettre à jour Deal\n(travelerId = voyageur,\nstatus = MATCHED)
+  Backend -> DB : Créer Transaction\n(type = PAYMENT,\nstatus = HELD,\nstripePaymentIntentId)
+  Backend -> DB : Créer TrackingEvent\n(MATCHED)
+
+  ' Créer la salle de chat
+  Backend -> DB : Créer ChatRoom\n(dealId)
+  Backend -> DB : Ajouter ChatParticipant\n(senderId)
+  Backend -> DB : Ajouter ChatParticipant\n(travelerId)
+
+  ' Notifier l'expéditeur
+  Backend -> DB : Créer Notification\n(senderId,\n"Votre deal a été accepté")
+  Backend -> WS : Émettre "deal-matched"\n(senderId)
+  WS --> AppS : Notification temps réel\n"Deal accepté par\n[Nom du voyageur]"
+  AppS --> Sender : Notification push\n+ mise à jour écran
+
+  Backend --> AppT : 200 OK\n{ deal (MATCHED),\nchatRoom }
+  AppT --> Traveler : "Deal accepté !\nVous pouvez chatter\navec l'expéditeur"
+
+else Deal déjà pris (status != OPEN)
+  Backend --> AppT : 409 Conflict\n{ error: "Deal déjà accepté" }
+  AppT --> Traveler : "Ce deal n'est plus\ndisponible"
+
+else Voyageur non vérifié
+  Backend --> AppT : 403 Forbidden\n{ error: "KYC non approuvé" }
+  AppT --> Traveler : "Veuillez compléter\nvotre vérification KYC"
+end
+
+@enduml

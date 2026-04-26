@@ -1,0 +1,68 @@
+@startuml
+title Diagramme de Cas d'Utilisation Global — Sprint 3\n(Espace Expéditeur)
+
+left to right direction
+skinparam actorStyle awesome
+
+actor "Expéditeur\n(Sender)" as Sender
+actor "Cloudinary" as Cloud
+actor "Système\nde pricing" as PriceAI
+
+rectangle "Sprint 3 — Espace Expéditeur" {
+
+  package "Tableau de bord" {
+    usecase "Consulter le\ntableau de bord" as UC_Home
+    usecase "Voir les deals\nactifs" as UC_ActiveDeals
+    usecase "Voir les\nstatistiques" as UC_Stats
+  }
+
+  package "Exploration" {
+    usecase "Explorer les\ntrajets disponibles" as UC_Explore
+    usecase "Filtrer par route,\ntaille, prix" as UC_Filter
+    usecase "Consulter le profil\nd'un voyageur" as UC_ViewProfile
+  }
+
+  package "Création d'annonce de colis" {
+    usecase "Saisir les détails\ndu colis" as UC_Package
+    usecase "Ajouter des photos\ndu colis" as UC_Photos
+    usecase "Définir la route\n(départ → arrivée)" as UC_Route
+    usecase "Renseigner les\ncoordonnées destinataire" as UC_Receiver
+    usecase "Définir le prix\n(avec suggestion IA)" as UC_Price
+    usecase "Réviser et publier\nl'annonce" as UC_Publish
+  }
+
+  package "Suivi de livraison" {
+    usecase "Suivre le statut\ndu colis" as UC_Track
+    usecase "Générer/afficher\nle QR code" as UC_QR
+    usecase "Confirmer la\nlivraison (QR)" as UC_Confirm
+  }
+}
+
+Sender --> UC_Home
+Sender --> UC_ActiveDeals
+Sender --> UC_Stats
+Sender --> UC_Explore
+Sender --> UC_Package
+Sender --> UC_Route
+Sender --> UC_Receiver
+Sender --> UC_Price
+Sender --> UC_Publish
+Sender --> UC_Track
+Sender --> UC_Confirm
+
+UC_Explore ..> UC_Filter : <<include>>
+UC_Explore ..> UC_ViewProfile : <<extend>>
+UC_Package ..> UC_Photos : <<include>>
+UC_Photos --> Cloud
+UC_Price --> PriceAI
+UC_Track ..> UC_QR : <<include>>
+UC_Confirm ..> UC_QR : <<include>>
+
+note right of UC_Price
+  Algorithme de suggestion :
+  - Prix de base par route
+  - Multiplicateur par catégorie
+  - Commission plateforme : 5%
+end note
+
+@enduml

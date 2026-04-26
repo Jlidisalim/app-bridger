@@ -1,0 +1,110 @@
+{
+  "expo": {
+    "name": "Bridger",
+    "slug": "app-bridger",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "scheme": "bridger",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1E3B8A"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.welcom.appbridger",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Bridger needs camera access for selfie verification and QR code scanning.",
+        "NSPhotoLibraryUsageDescription": "Bridger needs photo library access to upload package photos and ID documents.",
+        "NSLocationWhenInUseUsageDescription": "Bridger needs location access to track your deliveries.",
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1E3B8A"
+      },
+      "package": "com.welcom.appbridger",
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "bridger"
+            },
+            {
+              "scheme": "https",
+              "host": "bridger.app",
+              "pathPrefix": "/"
+            },
+            {
+              "scheme": "https",
+              "host": "www.bridger.app",
+              "pathPrefix": "/"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "ccfe2214-ed65-4699-a43d-2a846bafe3ef"
+      },
+      "apiUrl": ""
+    },
+    "plugins": [
+      "expo-font",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Bridger needs camera access for selfie verification and QR code scanning."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Bridger needs photo library access to upload package photos and ID documents."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Bridger needs location access to track your deliveries."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#1E3B8A",
+          "sounds": []
+        }
+      ],
+      "expo-secure-store"
+    ],
+    "owner": "salimslouma223"
+  }
+}

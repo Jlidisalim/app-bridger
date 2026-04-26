@@ -1,0 +1,51 @@
+@startuml
+title Raffinement — Cas d'Utilisation « Créer une Annonce de Colis »\n(Flux Multi-Étapes)
+
+left to right direction
+skinparam actorStyle awesome
+
+actor "Expéditeur" as Sender
+actor "Cloudinary" as Cloud
+
+rectangle "Création d'une annonce de colis (6 étapes)" {
+  usecase "Étape 1 : Choisir\nle rôle (Expéditeur)" as UC1
+  usecase "Étape 2 : Saisir les\ndétails du colis" as UC2
+  usecase "Saisir titre et\ndescription" as UC2a
+  usecase "Choisir la taille\n(S/M/L/XL)" as UC2b
+  usecase "Indiquer le poids\n(en kg)" as UC2c
+  usecase "Ajouter des photos\ndu colis" as UC2d
+  usecase "Étape 3 : Définir\nla route" as UC3
+  usecase "Sélectionner ville\net pays de départ" as UC3a
+  usecase "Sélectionner ville\net pays d'arrivée" as UC3b
+  usecase "Choisir les dates\n(collecte + livraison)" as UC3c
+  usecase "Étape 4 : Coordonnées\ndu destinataire" as UC4
+  usecase "Étape 5 : Fixer\nle prix" as UC5
+  usecase "Voir la suggestion\nde prix IA" as UC5a
+  usecase "Voir la commission\nplateforme (5%)" as UC5b
+  usecase "Étape 6 : Réviser\net publier" as UC6
+  usecase "Générer le\nQR code" as UC7
+}
+
+Sender --> UC1
+Sender --> UC2
+Sender --> UC3
+Sender --> UC4
+Sender --> UC5
+Sender --> UC6
+
+UC2 ..> UC2a : <<include>>
+UC2 ..> UC2b : <<include>>
+UC2 ..> UC2c : <<include>>
+UC2 ..> UC2d : <<include>>
+UC2d --> Cloud
+
+UC3 ..> UC3a : <<include>>
+UC3 ..> UC3b : <<include>>
+UC3 ..> UC3c : <<include>>
+
+UC5 ..> UC5a : <<include>>
+UC5 ..> UC5b : <<include>>
+
+UC6 ..> UC7 : <<include>>
+
+@enduml
