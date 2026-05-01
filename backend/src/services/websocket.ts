@@ -191,8 +191,33 @@ export function initWebSocket(httpServer: any): Server {
       logger.debug(`User ${socket.data.userId} left room ${roomId}`);
     });
 
+    // Join dispute room — verifies the user is a participant of the dispute
+    socket.on('join_dispute', async (disputeId: string) => {
+      try {
+        const dispute = await prisma.dispute.findUnique({
+          where: { id: disputeId },
+          select: { filerId: true, againstId: true },
+        });
+        if (!dispute) return;
+        if (
+          dispute.filerId === socket.data.userId ||
+          dispute.againstId === socket.data.userId ||
+          socket.data.isAdmin
+        ) {
+          socket.join(`dispute:${disputeId}`);
+          logger.debug(`User ${socket.data.userId} joined dispute ${disputeId}`);
+        }
+      } catch (e) {
+        logger.warn('join_dispute failed', { error: String(e) });
+      }
+    });
+
+    socket.on('leave_dispute', (disputeId: string) => {
+      socket.leave(`dispute:${disputeId}`);
+    });
+
     // Send message
-    socket.on('send_message', async ({ roomId, content, type = 'TEXT' }) => {
+    socket.on('send_message', async ({ roomId, content, type = 'TEXT', imageUrl, latitude, longitude, address }: any) => {
       // FIX 13: Rate limit messages — max 20/min per user
       if (!checkRateLimit(messageRateLimits, socket.data.userId!, MESSAGE_LIMIT, MESSAGE_WINDOW)) {
         socket.emit('rate_limit_error', { message: 'Too many messages. Slow down.' });
@@ -213,6 +238,27 @@ export function initWebSocket(httpServer: any): Server {
           return;
         }
 
+        // Block enforcement: refuse if either party has blocked the other
+        const otherParticipants = await prisma.chatParticipant.findMany({
+          where: { chatRoomId: roomId, userId: { not: socket.data.userId! } },
+          select: { userId: true },
+        });
+        const otherIds = otherParticipants.map((p) => p.userId);
+        if (otherIds.length > 0) {
+          const block = await prisma.userBlock.findFirst({
+            where: {
+              OR: [
+                { blockerId: socket.data.userId!, blockedId: { in: otherIds } },
+                { blockerId: { in: otherIds }, blockedId: socket.data.userId! },
+              ],
+            },
+          });
+          if (block) {
+            socket.emit('error', { message: 'Messaging is blocked between these users', code: 'BLOCKED' });
+            return;
+          }
+        }
+
         // Sanitize message content — strip all HTML tags
         const sanitizedContent = sanitizeHtml(content ?? '', {
           allowedTags: [],
@@ -231,6 +277,10 @@ export function initWebSocket(httpServer: any): Server {
             senderId: socket.data.userId!,
             content: sanitizedContent,
             type: type as any,
+            imageUrl: imageUrl || null,
+            latitude: typeof latitude === 'number' ? latitude : null,
+            longitude: typeof longitude === 'number' ? longitude : null,
+            address: address || null,
           },
           include: {
             sender: {

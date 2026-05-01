@@ -72,12 +72,23 @@ interface UseSocketOptions {
   autoConnect?: boolean;
 }
 
+interface StructuredMessagePayload {
+  roomId: string;
+  content: string;
+  type: 'TEXT' | 'IMAGE' | 'LOCATION';
+  imageUrl?: string;
+  latitude?: number;
+  longitude?: number;
+  address?: string;
+}
+
 interface UseSocketReturn {
   socket: Socket | null;
   isConnected: boolean;
   joinRoom: (roomId: string) => void;
   leaveRoom: (roomId: string) => void;
   sendMessage: (roomId: string, content: string, type?: 'TEXT' | 'IMAGE') => void;
+  sendStructuredMessage: (payload: StructuredMessagePayload) => void;
   startTyping: (roomId: string) => void;
   stopTyping: (roomId: string) => void;
   onNewMessage: (callback: (message: any) => void) => () => void;
@@ -180,6 +191,10 @@ export function useSocket(options?: UseSocketOptions): UseSocketReturn {
     socketRef.current?.emit('send_message', { roomId, content, type });
   }, []);
 
+  const sendStructuredMessage = useCallback((payload: StructuredMessagePayload) => {
+    socketRef.current?.emit('send_message', payload);
+  }, []);
+
   const startTyping = useCallback((roomId: string) => {
     socketRef.current?.emit('typing', { roomId });
   }, []);
@@ -215,6 +230,7 @@ export function useSocket(options?: UseSocketOptions): UseSocketReturn {
     joinRoom,
     leaveRoom,
     sendMessage,
+    sendStructuredMessage,
     startTyping,
     stopTyping,
     onNewMessage,

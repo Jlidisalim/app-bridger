@@ -7,7 +7,12 @@ import { validate } from '../middleware/validate';
 import { createDealSchema, updateDealSchema, dealFiltersSchema } from '../validators/auth';
 import { prisma } from '../config/db';
 import { sendPushNotification, sendPushToMultiple } from '../services/pushService';
-import { releaseEscrowForCancellation } from '../services/paymentService';
+import {
+  assertSenderCanAfford,
+  holdEscrow,
+  releaseEscrowToTraveler,
+  refundEscrowToSender,
+} from '../services/escrowService';
 import { getIO } from '../services/websocket';
 import { saveBuffer, saveRawBuffer, getUploadUrl, sanitizeFilename, ALLOWED_MIME_TYPES, MAX_FILES_PER_REQUEST } from '../services/uploadService';
 import logger from '../utils/logger';
@@ -127,6 +132,11 @@ router.post('/', authenticate, validate(createDealSchema), async (req: any, res,
       packageSize, isFragile = false, itemValue, weight, price, currency = 'USD', pickupDate, deliveryDate, images,
       receiverName, receiverPhone,
     } = req.validated || req.body;
+
+    // Verify the sender has the shipment fee available before posting.
+    // Funds are not blocked yet — they are only moved to escrow when a
+    // Traveler accepts (POST /deals/:id/match).
+    await assertSenderCanAfford(req.user.id, Number(price));
 
     // Process images: decode base64 data URIs → save to uploads/deal/ → store server URLs
     let processedImages: string[] = [];
@@ -426,8 +436,9 @@ router.delete('/:id', authenticate, async (req: any, res, next) => {
       }),
     ]);
 
-    releaseEscrowForCancellation(deal.id, deal.senderId).catch((e) =>
-      logger.error('Escrow release failed on cancellation', { dealId: deal.id, error: String(e) })
+    // Failed/cancelled delivery → return blocked funds to sender's available balance.
+    refundEscrowToSender(deal.id, `Cancelled by ${isSender ? 'SENDER' : 'TRAVELER'}: ${reason}`).catch((e) =>
+      logger.error('Escrow refund failed on cancellation', { dealId: deal.id, error: String(e) })
     );
 
     const otherPartyId = isSender ? deal.travelerId : deal.senderId;
@@ -452,12 +463,33 @@ router.post('/:id/match', authenticate, async (req: any, res, next) => {
     if (deal.status !== 'OPEN')         return res.status(400).json({ error: 'Deal is not open' });
     if (deal.senderId === req.user.id)  return res.status(400).json({ error: 'Cannot match your own deal' });
 
+    // Atomically hold the shipment fee from the sender's available balance
+    // and move it into the Blocked/Escrow state. The Traveler does not
+    // need any balance — only the Sender's funds are touched.
+    try {
+      await holdEscrow({
+        senderId: deal.senderId,
+        dealId: deal.id,
+        amount: Number(deal.price),
+        currency: deal.currency || 'USD',
+      });
+    } catch (e: any) {
+      const status = e?.status === 400 ? 402 : (e?.status || 500);
+      return res.status(status).json({ error: e?.message || 'Failed to hold escrow' });
+    }
+
     const updatedDeal = await prisma.deal.update({
       where: { id: req.params.id, status: 'OPEN' },
       data: { travelerId: req.user.id, status: 'MATCHED' },
     }).catch(() => null);
 
-    if (!updatedDeal) return res.status(409).json({ error: 'Deal is no longer available' });
+    if (!updatedDeal) {
+      // The deal was taken or moved out of OPEN by another request between
+      // the escrow hold and this update — undo the hold to keep the
+      // sender's wallet consistent.
+      await refundEscrowToSender(deal.id, 'Deal no longer available — race condition').catch(() => {});
+      return res.status(409).json({ error: 'Deal is no longer available' });
+    }
 
     // Create chat room or add traveler to existing one
     const existingRoom = await prisma.chatRoom.findUnique({
@@ -583,6 +615,13 @@ router.post('/:id/complete', authenticate, async (req: any, res, next) => {
       prisma.deal.update({ where: { id: req.params.id }, data: { status: 'COMPLETED' } }),
       prisma.trackingEvent.create({ data: { dealId: deal.id, status: 'COMPLETED', actor: req.user.id } }),
     ]);
+
+    // Release escrowed funds → traveler's available balance.
+    try {
+      await releaseEscrowToTraveler(deal.id);
+    } catch (e) {
+      logger.error('Escrow release failed on complete', { dealId: deal.id, error: String(e) });
+    }
 
     // 🎉 Push BOTH parties: delivery complete + review prompt
     const recipients = [deal.senderId, deal.travelerId].filter(Boolean) as string[];
@@ -794,6 +833,13 @@ router.post('/receiver-verify', async (req: any, res, next) => {
         }),
       ),
     ]);
+
+    // Receiver confirmed delivery → mark COMPLETED and release escrow.
+    try {
+      await releaseEscrowToTraveler(deal.id);
+    } catch (e) {
+      logger.error('Escrow release failed on receiver-verify', { dealId: deal.id, error: String(e) });
+    }
 
     // Notify sender
     if (deal.senderId) {

@@ -266,7 +266,7 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ onViewDetails, onC
 
     // Filter deals by selected airport city and active tab
     const isOpenDeal = (d: any) => d.status === 'OPEN' || d.status === 'published';
-    const isActiveDeal = (d: any) => ['MATCHED', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED', 'accepted', 'in_transit'].includes(d.status || '');
+    const isActiveDeal = (d: any) => ['MATCHED', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED', 'DISPUTED', 'accepted', 'in_transit'].includes(d.status || '');
 
     const dealsForTab = deals.filter((d: any) =>
         activeTab === 'shipments' ? isOpenDeal(d) : isActiveDeal(d)

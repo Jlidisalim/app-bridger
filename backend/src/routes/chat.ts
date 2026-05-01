@@ -1,12 +1,44 @@
 // Chat Routes
 import { Router } from 'express';
+import multer from 'multer';
 import { authenticate } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { sendMessageSchema } from '../validators/auth';
 import { prisma } from '../config/db';
 import { getIO } from '../services/websocket';
+import { saveBuffer } from '../services/uploadService';
 
 const router = Router();
+
+const CHAT_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const chatImageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  fileFilter(_req, file, cb) {
+    if (CHAT_IMAGE_MIME_TYPES.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only JPEG, PNG, WebP, and GIF images are allowed'));
+    }
+  },
+});
+
+// POST /chat/upload - Upload an image attachment, returns the public URL.
+// Client then sends a message with type=IMAGE and imageUrl set to the returned url.
+router.post('/upload', authenticate, chatImageUpload.single('image'), async (req: any, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'image file is required (field: image)' });
+    }
+    const url = await saveBuffer(req.file.buffer, req.file.mimetype, 'chat', `chat_${req.user.id}`);
+    res.json({ success: true, url });
+  } catch (error: any) {
+    if (error?.message?.includes('Only JPEG')) {
+      return res.status(400).json({ error: error.message });
+    }
+    next(error);
+  }
+});
 
 // GET /chat/rooms - List chat rooms
 // OPTIMIZATION: unread counts fetched in a single groupBy query instead of
@@ -188,7 +220,7 @@ router.get('/rooms/:id/messages', authenticate, async (req: any, res, next) => {
 // POST /chat/rooms/:id/messages - Send a message (or reply)
 router.post('/rooms/:id/messages', authenticate, validate(sendMessageSchema), async (req: any, res, next) => {
   try {
-    const { content, type = 'TEXT', replyToId } = req.validated || req.body;
+    const { content, type = 'TEXT', replyToId, imageUrl, latitude, longitude, address } = req.validated || req.body;
 
     // Verify user is participant
     const participant = await prisma.chatParticipant.findFirst({
@@ -200,6 +232,26 @@ router.post('/rooms/:id/messages', authenticate, validate(sendMessageSchema), as
 
     if (!participant) {
       return res.status(403).json({ error: 'Not a participant in this room' });
+    }
+
+    // Block enforcement: refuse if either party has blocked the other
+    const otherParticipants = await prisma.chatParticipant.findMany({
+      where: { chatRoomId: req.params.id, userId: { not: req.user.id } },
+      select: { userId: true },
+    });
+    const otherIds = otherParticipants.map((p) => p.userId);
+    if (otherIds.length > 0) {
+      const block = await prisma.userBlock.findFirst({
+        where: {
+          OR: [
+            { blockerId: req.user.id, blockedId: { in: otherIds } },
+            { blockerId: { in: otherIds }, blockedId: req.user.id },
+          ],
+        },
+      });
+      if (block) {
+        return res.status(403).json({ error: 'Messaging is blocked between these users', code: 'BLOCKED' });
+      }
     }
 
     // Verify replyToId exists in this room if provided
@@ -218,7 +270,11 @@ router.post('/rooms/:id/messages', authenticate, validate(sendMessageSchema), as
         senderId: req.user.id,
         content,
         type,
-        replyToId: replyToId || null
+        replyToId: replyToId || null,
+        imageUrl: imageUrl || null,
+        latitude: typeof latitude === 'number' ? latitude : null,
+        longitude: typeof longitude === 'number' ? longitude : null,
+        address: address || null,
       },
       include: {
         sender: {

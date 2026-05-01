@@ -34,9 +34,10 @@ const HomeTabWrapper = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const { mode, setMode, deals, currentUser } = useAppStore();
 
-  // Find the first active deal the current user is involved in
+  // Find the first active deal the current user is involved in.
+  // DISPUTED deals are still active — the shipment continues until resolution.
   const firstActiveDeal = deals.find((d: any) =>
-    ['MATCHED', 'PICKED_UP', 'IN_TRANSIT'].includes(d.status) &&
+    ['MATCHED', 'PICKED_UP', 'IN_TRANSIT', 'DISPUTED'].includes(d.status) &&
     (d.senderId === currentUser?.id || d.travelerId === currentUser?.id)
   );
 

@@ -111,12 +111,18 @@ export const DealDetailsScreen: React.FC<DealDetailsScreenProps> = ({
         });
     };
 
+    // Per escrow spec: travelers accepting a shipment do NOT need any balance —
+    // the sender's wallet is debited at acceptance time. Only run the local
+    // balance check when the current user is the SENDER accepting a TRIP
+    // offered by a traveler.
+    const requireBalanceCheck = entityType === 'trip';
+
     const handleAccept = async () => {
         if (isSubmitting) return;
         if (deal.negotiable) {
             setIsNegotiateModalVisible(true);
         } else {
-            if (isInsufficient(deal.price)) {
+            if (requireBalanceCheck && isInsufficient(deal.price)) {
                 setPendingPrice(deal.price);
                 setShowInsufficientAlert(true);
                 return;
@@ -138,7 +144,7 @@ export const DealDetailsScreen: React.FC<DealDetailsScreenProps> = ({
     const submitOffer = async () => {
         if (isSubmitting) return;
         const price = parseFloat(offerPrice);
-        if (isInsufficient(price)) {
+        if (requireBalanceCheck && isInsufficient(price)) {
             setPendingPrice(price);
             setIsNegotiateModalVisible(false);
             setShowInsufficientAlert(true);

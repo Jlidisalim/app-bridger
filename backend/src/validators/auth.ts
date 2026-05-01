@@ -113,8 +113,12 @@ export const walletFiltersSchema = z.object({
 // Chat validators
 export const sendMessageSchema = z.object({
   content: z.string().min(1).max(2000),
-  type: z.enum(['TEXT', 'IMAGE']).default('TEXT'),
+  type: z.enum(['TEXT', 'IMAGE', 'LOCATION']).default('TEXT'),
   replyToId: z.string().optional(),
+  imageUrl: z.string().optional(),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
+  address: z.string().max(500).optional(),
 });
 
 export const chatFiltersSchema = z.object({
@@ -173,16 +177,40 @@ export const updateTripSchema = z.object({
 });
 
 // Dispute validators
+export const DISPUTE_TYPES = [
+  'ITEM_DAMAGED',
+  'ITEM_LOST',
+  'NOT_DELIVERED',
+  'WRONG_ITEM',
+  'FRAUD',
+  'OTHER',
+] as const;
+
 export const createDisputeSchema = z.object({
   dealId: z.string().min(1),
+  disputeType: z.enum(DISPUTE_TYPES).default('OTHER'),
   reason: z.string().min(10).max(2000),
+  description: z.string().max(5000).optional(),
+});
+
+export const disputeFiltersSchema = z.object({
+  dealId: z.string().optional(),
+  status: z.string().optional(),
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
 });
 
 export const submitEvidenceSchema = z.object({
-  evidence: z.union([
-    z.string().min(1).max(5000),
-    z.array(z.string().min(1).max(5000)).min(1).max(10),
-  ]),
+  type: z.enum(['PHOTO', 'VIDEO', 'DOCUMENT', 'TEXT']).default('TEXT'),
+  content: z.string().max(5000).optional(),
+  url: z.string().url().optional(),
+}).refine((d) => Boolean(d.content || d.url), {
+  message: 'content or url is required',
+  path: ['content'],
+});
+
+export const sendDisputeMessageSchema = z.object({
+  content: z.string().trim().min(1).max(2000),
 });
 
 // Review validators

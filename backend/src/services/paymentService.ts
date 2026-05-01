@@ -1,4 +1,5 @@
 import Stripe from 'stripe';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../config/db';
 import config from '../config/env';
 import { AppError } from '../middleware/errorHandler';
@@ -50,8 +51,10 @@ export async function createWithdrawal(
 
   if (!user) throw new AppError('User not found', 404);
 
-  const balance = Number(user.walletBalance);
-  if (balance < amount) throw new AppError('Insufficient balance', 400);
+  // Withdraw against available balance (escrowed funds are not withdrawable).
+  const wallet = await prisma.wallet.findUnique({ where: { userId } });
+  const available = wallet ? Number(wallet.availableBalance) : Number(user.walletBalance);
+  if (available < amount) throw new AppError('Insufficient available balance', 400);
 
   // Require a Stripe Connect account to be linked before allowing withdrawals
   if (!user.stripeConnectAccountId) {
@@ -61,8 +64,9 @@ export async function createWithdrawal(
     );
   }
 
-  // Atomically deduct balance + create transaction record
-  const [transaction] = await prisma.$transaction([
+  // Atomically deduct balance + create transaction record. Wallet.availableBalance
+  // and Wallet.balance must stay in sync with User.walletBalance.
+  const ops: Prisma.PrismaPromise<any>[] = [
     prisma.transaction.create({
       data: { userId, type: 'WITHDRAWAL', amount, currency, status: 'PENDING' },
     }),
@@ -70,7 +74,17 @@ export async function createWithdrawal(
       where: { id: userId },
       data: { walletBalance: { decrement: amount } },
     }),
-  ]);
+  ];
+  if (wallet) {
+    ops.push(prisma.wallet.update({
+      where: { userId },
+      data: {
+        balance: { decrement: amount },
+        availableBalance: { decrement: amount },
+      },
+    }));
+  }
+  const [transaction] = await prisma.$transaction(ops);
 
   // Initiate payout via Stripe Connect
   try {
@@ -95,7 +109,7 @@ export async function createWithdrawal(
     });
   } catch (stripeError: any) {
     // Stripe failed — refund the balance and mark transaction failed
-    await prisma.$transaction([
+    const rollback: Prisma.PrismaPromise<any>[] = [
       prisma.transaction.update({
         where: { id: transaction.id },
         data: { status: 'FAILED', metadata: JSON.stringify({ error: stripeError.message }) },
@@ -104,7 +118,17 @@ export async function createWithdrawal(
         where: { id: userId },
         data: { walletBalance: { increment: amount } },
       }),
-    ]);
+    ];
+    if (wallet) {
+      rollback.push(prisma.wallet.update({
+        where: { userId },
+        data: {
+          balance: { increment: amount },
+          availableBalance: { increment: amount },
+        },
+      }));
+    }
+    await prisma.$transaction(rollback);
     logger.error(`Stripe transfer failed for user ${userId}`, { error: stripeError.message });
     throw new AppError(`Payout failed: ${stripeError.message}`, 500);
   }

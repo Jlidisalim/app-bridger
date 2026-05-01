@@ -310,9 +310,30 @@ export const chatAPI = {
     return result.data?.items || result.data || [];
   },
 
-  sendMessage: async (conversationId: string, text: string): Promise<{ success: boolean; messageId: string }> => {
+  sendMessage: async (conversationId: string, text: string): Promise<{ success: boolean; messageId: string; error?: string }> => {
     const result = await apiClient.post<{ id: string }>(`/chat/rooms/${conversationId}/messages`, { content: text });
-    return { success: result.success, messageId: result.data?.id || '' };
+    return { success: result.success, messageId: result.data?.id || '', error: result.error };
+  },
+
+  // Send a structured message (image / location / etc.) — sender provides content + extra fields.
+  sendStructuredMessage: async (
+    conversationId: string,
+    payload: { content: string; type: 'TEXT' | 'IMAGE' | 'LOCATION'; imageUrl?: string; latitude?: number; longitude?: number; address?: string; replyToId?: string }
+  ): Promise<{ success: boolean; messageId: string; error?: string }> => {
+    const result = await apiClient.post<{ id: string }>(`/chat/rooms/${conversationId}/messages`, payload);
+    return { success: result.success, messageId: result.data?.id || '', error: result.error };
+  },
+
+  // Upload a chat image attachment. Returns the public URL of the saved file.
+  uploadImage: async (uri: string, mimeType = 'image/jpeg'): Promise<string> => {
+    const formData = new FormData();
+    const filename = uri.split('/').pop() || `chat_${Date.now()}.jpg`;
+    formData.append('image', { uri, name: filename, type: mimeType } as any);
+    const result = await apiClient.upload<{ url: string }>('/chat/upload', formData);
+    if (!result.success || !result.data?.url) {
+      throw new Error(result.error || 'Failed to upload image');
+    }
+    return result.data.url;
   },
 
   // Find existing chat room for a deal or trip, or create one.
@@ -323,6 +344,55 @@ export const chatAPI = {
     const body = type === 'trip' ? { tripId: id } : { dealId: id };
     const result = await apiClient.post<{ id: string }>('/chat/rooms', body);
     return result.data?.id || '';
+  },
+};
+
+// ============================================
+// User moderation API (block / report)
+// ============================================
+
+export type ReportReason =
+  | 'SPAM'
+  | 'SCAM'
+  | 'HARASSMENT'
+  | 'INAPPROPRIATE'
+  | 'FAKE_LISTING'
+  | 'IMPERSONATION'
+  | 'OTHER';
+
+export const userModerationAPI = {
+  blockUser: async (userId: string): Promise<{ success: boolean; error?: string }> => {
+    const result = await apiClient.post<any>(`/users/${userId}/block`, {});
+    return { success: result.success, error: result.error };
+  },
+
+  unblockUser: async (userId: string): Promise<{ success: boolean; error?: string }> => {
+    const result = await apiClient.delete<any>(`/users/${userId}/block`);
+    return { success: result.success, error: result.error };
+  },
+
+  getBlockStatus: async (userId: string): Promise<{ blockedByMe: boolean; blockedByThem: boolean; anyBlock: boolean }> => {
+    const result = await apiClient.get<{ blockedByMe: boolean; blockedByThem: boolean; anyBlock: boolean }>(`/users/${userId}/block`);
+    return result.data || { blockedByMe: false, blockedByThem: false, anyBlock: false };
+  },
+
+  listBlockedUsers: async (): Promise<any[]> => {
+    const result = await apiClient.get<any[]>('/users/me/blocks');
+    return result.data || [];
+  },
+
+  reportUser: async (
+    userId: string,
+    reason: ReportReason,
+    description?: string,
+    chatRoomId?: string
+  ): Promise<{ success: boolean; reportId?: string; error?: string }> => {
+    const result = await apiClient.post<{ report?: { id: string } }>(`/users/${userId}/report`, {
+      reason,
+      description,
+      chatRoomId,
+    });
+    return { success: result.success, reportId: result.data?.report?.id, error: result.error };
   },
 };
 
@@ -408,25 +478,68 @@ export const pricingAPI = {
 // Dispute API
 // ============================================
 
+export type DisputeType =
+  | 'ITEM_DAMAGED'
+  | 'ITEM_LOST'
+  | 'NOT_DELIVERED'
+  | 'WRONG_ITEM'
+  | 'FRAUD'
+  | 'OTHER';
+
 export const disputeAPI = {
-  createDispute: async (dealId: string, reason: string): Promise<{ success: boolean; disputeId: string }> => {
-    const result = await apiClient.post<{ id: string }>('/disputes', { dealId, reason });
-    return { success: result.success, disputeId: result.data?.id || '' };
+  createDispute: async (
+    dealId: string,
+    reason: string,
+    opts?: { disputeType?: DisputeType; description?: string },
+  ): Promise<{ success: boolean; disputeId: string; error?: string }> => {
+    const result = await apiClient.post<{ id: string }>('/disputes', {
+      dealId,
+      reason,
+      disputeType: opts?.disputeType ?? 'OTHER',
+      ...(opts?.description ? { description: opts.description } : {}),
+    });
+    return { success: result.success, disputeId: result.data?.id || '', error: result.error };
   },
 
-  submitEvidence: async (disputeId: string, evidence: string[]): Promise<{ success: boolean }> => {
-    const result = await apiClient.post<any>(`/disputes/${disputeId}/evidence`, { evidence });
-    return { success: result.success };
+  // Submit a JSON evidence item (text note or external URL)
+  submitEvidenceJson: async (
+    disputeId: string,
+    payload: { type?: 'TEXT' | 'PHOTO' | 'VIDEO' | 'DOCUMENT'; content?: string; url?: string },
+  ): Promise<{ success: boolean; error?: string }> => {
+    const result = await apiClient.post<any>(`/disputes/${disputeId}/evidence`, payload);
+    return { success: result.success, error: result.error };
   },
 
-  getDisputeStatus: async (disputeId: string): Promise<{
-    status: 'opened' | 'evidence_submitted' | 'admin_reviewing' | 'resolved';
-    progress: number;
-  }> => {
-    const result = await apiClient.get<{ status: string; progress: number }>(`/disputes/${disputeId}`);
-    return {
-      status: (result.data?.status as any) || 'opened',
-      progress: result.data?.progress || 0,
-    };
+  // Upload a single binary evidence file
+  uploadEvidenceFile: async (disputeId: string, formData: FormData) => {
+    return apiClient.upload<any>(`/disputes/${disputeId}/evidence/upload`, formData);
+  },
+
+  getDispute: async (disputeId: string) => {
+    return apiClient.get<any>(`/disputes/${disputeId}`);
+  },
+
+  getTimeline: async (disputeId: string) => {
+    return apiClient.get<{ items: any[] }>(`/disputes/${disputeId}/timeline`);
+  },
+
+  getMessages: async (disputeId: string, limit = 200) => {
+    return apiClient.get<{ items: any[] }>(`/disputes/${disputeId}/messages?limit=${limit}`);
+  },
+
+  sendMessage: async (disputeId: string, content: string) => {
+    return apiClient.post<any>(`/disputes/${disputeId}/messages`, { content });
+  },
+
+  sendAttachment: async (disputeId: string, formData: FormData) => {
+    return apiClient.upload<any>(`/disputes/${disputeId}/messages/attachment`, formData);
+  },
+
+  escalate: async (disputeId: string) => {
+    return apiClient.post<{ success: boolean }>(`/disputes/${disputeId}/mediator`, {});
+  },
+
+  listForDeal: async (dealId: string) => {
+    return apiClient.get<{ items: any[] }>(`/disputes?dealId=${encodeURIComponent(dealId)}`);
   },
 };

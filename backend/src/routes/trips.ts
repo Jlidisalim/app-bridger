@@ -5,6 +5,13 @@ import { validate } from '../middleware/validate';
 import { createTripSchema, updateTripSchema } from '../validators/auth';
 import { prisma } from '../config/db';
 import { getIO } from '../services/websocket';
+import {
+  assertSenderCanAfford,
+  holdEscrow,
+  refundEscrowToSender,
+} from '../services/escrowService';
+import { sendPushNotification } from '../services/pushService';
+import logger from '../utils/logger';
 
 const router = Router();
 
@@ -190,6 +197,132 @@ router.delete('/:id', authenticate, async (req: any, res, next) => {
     });
 
     res.json({ message: 'Trip cancelled', cancelledByRole: 'TRAVELER' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /trips/:id/accept — Sender accepts a Traveler's trip.
+// Verifies the sender can afford the trip price, creates a matched Deal,
+// and immediately blocks the funds in escrow. The blocked amount is
+// released to the traveler when the deal is marked COMPLETED.
+//
+// Body (optional):
+//   {
+//     title?: string,            // shipment title (defaults to trip route)
+//     description?: string,
+//     packageSize?: string,      // SMALL|MEDIUM|LARGE|EXTRA_LARGE (default MEDIUM)
+//     weight?: number,
+//     itemValue?: number,
+//     isFragile?: boolean,
+//     receiverName?: string,
+//     receiverPhone?: string,
+//     amount?: number,           // total transaction amount; defaults to trip.price
+//   }
+router.post('/:id/accept', authenticate, async (req: any, res, next) => {
+  try {
+    const trip = await prisma.trip.findUnique({
+      where: { id: req.params.id },
+      include: { traveler: { select: { id: true, name: true } } },
+    });
+    if (!trip) return res.status(404).json({ error: 'Trip not found' });
+    if (trip.status !== 'OPEN') return res.status(400).json({ error: 'Trip is not open' });
+    if (trip.travelerId === req.user.id) return res.status(400).json({ error: 'Cannot accept your own trip' });
+
+    const requestedAmount = Number(req.body?.amount ?? trip.price);
+    if (!(requestedAmount > 0)) return res.status(400).json({ error: 'amount must be greater than zero' });
+
+    // 1. Verify the sender's available balance covers the total transaction amount.
+    try {
+      await assertSenderCanAfford(req.user.id, requestedAmount);
+    } catch (e: any) {
+      return res.status(e?.status === 400 ? 402 : 500).json({ error: e?.message || 'Insufficient balance' });
+    }
+
+    const {
+      title,
+      description,
+      packageSize = 'MEDIUM',
+      weight,
+      itemValue,
+      isFragile = false,
+      receiverName,
+      receiverPhone,
+    } = req.body || {};
+
+    // 2. Create the matched deal and 3. block the funds atomically. If any
+    //    step fails after the deal is created, undo it to prevent orphans.
+    const deal = await prisma.deal.create({
+      data: {
+        senderId: req.user.id,
+        travelerId: trip.travelerId,
+        title: title || `${trip.fromCity} → ${trip.toCity}`,
+        description: description || null,
+        fromCity: trip.fromCity,
+        toCity: trip.toCity,
+        fromCountry: trip.fromCountry,
+        toCountry: trip.toCountry,
+        packageSize,
+        isFragile: !!isFragile,
+        itemValue: itemValue ?? null,
+        weight: weight ?? null,
+        price: requestedAmount,
+        currency: trip.currency || 'USD',
+        status: 'MATCHED',
+        receiverName: receiverName || null,
+        receiverPhone: receiverPhone || null,
+      },
+    });
+
+    try {
+      await holdEscrow({
+        senderId: req.user.id,
+        dealId: deal.id,
+        amount: requestedAmount,
+        currency: trip.currency || 'USD',
+      });
+    } catch (e: any) {
+      await prisma.deal.delete({ where: { id: deal.id } }).catch(() => {});
+      return res.status(e?.status === 400 ? 402 : 500).json({ error: e?.message || 'Failed to block funds' });
+    }
+
+    // Mark the trip as matched so it cannot be accepted twice.
+    const matchedTrip = await prisma.trip.update({
+      where: { id: trip.id, status: 'OPEN' },
+      data: { status: 'MATCHED' },
+    }).catch(() => null);
+
+    if (!matchedTrip) {
+      // Race condition: another sender accepted between our check and update.
+      // Refund and roll back the deal.
+      await refundEscrowToSender(deal.id, 'Trip already matched — race condition').catch(() => {});
+      await prisma.deal.delete({ where: { id: deal.id } }).catch(() => {});
+      return res.status(409).json({ error: 'Trip is no longer available' });
+    }
+
+    // Open / extend the chat room linked to this trip.
+    const existingRoom = await prisma.chatRoom.findUnique({
+      where: { tripId: trip.id },
+      include: { participants: true },
+    });
+    if (!existingRoom) {
+      await prisma.chatRoom.create({
+        data: {
+          dealId: deal.id,
+          participants: { createMany: { data: [{ userId: req.user.id }, { userId: trip.travelerId }] } },
+        },
+      }).catch(() => {});
+    }
+
+    // Notify the traveler.
+    sendPushNotification(
+      trip.travelerId,
+      '✅ Trip Accepted',
+      `A sender has accepted your trip ${trip.fromCity} → ${trip.toCity}`,
+      { type: 'trip_accepted', tripId: trip.id, dealId: deal.id, screen: 'DealDetails' },
+    ).catch((e) => logger.error('Push failed', { error: String(e) }));
+
+    res.json({ success: true, deal, trip: matchedTrip });
   } catch (error) {
     next(error);
   }

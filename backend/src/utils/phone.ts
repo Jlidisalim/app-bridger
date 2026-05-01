@@ -3,15 +3,19 @@ import { parsePhoneNumberFromString, isValidPhoneNumber } from 'libphonenumber-j
 export function normalizePhone(raw: string): string {
   // Remove all non-digit characters except leading +
   const cleaned = raw.replace(/[^\d+]/g, '');
-  
-  // Try to parse as a phone number
+
+  // Try strict country-rule parsing first; fall back to permissive E.164 shape
+  // ("+" + 8–15 digits) so test/fake numbers are accepted.
   const parsed = parsePhoneNumberFromString(cleaned);
-  
-  if (!parsed || !isValidPhoneNumber(cleaned)) {
-    throw new Error('Invalid phone number');
+  if (parsed && isValidPhoneNumber(cleaned)) {
+    return parsed.format('E.164');
   }
-  
-  return parsed.format('E.164'); // Returns +1234567890 format
+
+  if (/^\+\d{8,15}$/.test(cleaned)) {
+    return cleaned;
+  }
+
+  throw new Error('Invalid phone number');
 }
 
 export function formatPhoneForDisplay(raw: string): string {

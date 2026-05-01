@@ -44,6 +44,8 @@ router.get('/', authenticate, async (req: any, res, next) => {
 
     res.json({
       balance: wallet.balance,
+      // Funds locked in active escrow holds (shipments / accepted trips).
+      blockedBalance: wallet.pendingBalance,
       pendingBalance: wallet.pendingBalance,
       availableBalance: wallet.availableBalance,
       currency: wallet.currency,

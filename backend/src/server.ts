@@ -93,6 +93,20 @@ app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 // Serve uploaded files (avatar, deal, face, kyc) from backend/uploads/
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
+// Serve static legal documents (terms, privacy) from backend/public/legal/
+// — kept here so the same backend deploy ships the agreements that the mobile
+// app links to from the Profile screen.
+app.use(
+  '/legal',
+  express.static(path.join(__dirname, '../public/legal'), {
+    extensions: ['html'],
+    maxAge: '1d',
+    setHeaders: (res) => {
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+    },
+  }),
+);
+
 app.get('/health/ml', (_req, res) => {
   const allOk = Object.values(mlStatus).every(v => v === 'ok');
   const anyError = Object.values(mlStatus).some(v => v === 'error');

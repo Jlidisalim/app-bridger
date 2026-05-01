@@ -96,6 +96,10 @@ model User {
   faceScans      FaceScan[]
   auditLogs      AuditLog[]
   kycDocuments   KycDocument[]
+  blocksMade     UserBlock[]       @relation("BlockerUser")
+  blocksReceived UserBlock[]       @relation("BlockedUser")
+  reportsFiled   UserReport[]      @relation("ReporterUser")
+  reportsAgainst UserReport[]      @relation("ReportedUser")
 
   @@index([kycStatus])
   @@index([faceVerificationStatus])
@@ -309,7 +313,11 @@ model ChatMessage {
   senderId   String?
   sender     User?    @relation(fields: [senderId], references: [id], onDelete: SetNull)
   content    String
-  type       String   @default("TEXT")  // TEXT, IMAGE, SYSTEM
+  type       String   @default("TEXT")  // TEXT, IMAGE, LOCATION, SYSTEM
+  imageUrl   String?
+  latitude   Float?
+  longitude  Float?
+  address    String?
   readAt     DateTime?
   createdAt  DateTime @default(now())
   replyToId  String?
@@ -376,6 +384,7 @@ model Dispute {
   filer         User      @relation("DisputeFiler", fields: [filerId], references: [id], onDelete: Restrict)
   againstId     String
   against       User      @relation("DisputeAgainst", fields: [againstId], references: [id], onDelete: Restrict)
+  disputeType   String    @default("OTHER")   // ITEM_DAMAGED, ITEM_LOST, NOT_DELIVERED, WRONG_ITEM, FRAUD, OTHER
   reason        String
   description   String?
   evidence      String?   // JSON string stored as text (legacy — see DisputeEvidence)
@@ -384,6 +393,8 @@ model Dispute {
   resolvedById  String?   // admin user ID who resolved it
   slaDeadline   DateTime  @default(dbgenerated("NOW() + interval '72 hours'"))
   evidences     DisputeEvidence[]
+  messages      DisputeMessage[]
+  timeline      DisputeTimelineEvent[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -401,9 +412,49 @@ model DisputeEvidence {
   type        String   // PHOTO, VIDEO, DOCUMENT, TEXT
   url         String?
   content     String?
+  fileName    String?
+  fileSize    Int?
+  mimeType    String?
   createdAt   DateTime @default(now())
 
   @@index([disputeId])
+}
+
+// Per-dispute conversation thread.  Decoupled from ChatRoom/ChatMessage so that
+// dispute communication (with audit/legal value) is preserved even when the
+// underlying deal chat is purged.  Supports inline file attachments.
+model DisputeMessage {
+  id            String   @id @default(cuid())
+  disputeId     String
+  dispute       Dispute  @relation(fields: [disputeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  senderId      String?  // null for SYSTEM messages
+  senderRole    String   // FILER | AGAINST | ADMIN | SYSTEM
+  content       String?
+  attachmentUrl String?
+  attachmentType String? // image | video | document
+  attachmentName String?
+  attachmentSize Int?
+  createdAt     DateTime @default(now())
+
+  @@index([disputeId, createdAt])
+}
+
+// Append-only audit timeline for the dispute lifecycle.  Every state change,
+// evidence submission, message exchange and resolution writes one row here;
+// the frontend renders this directly as the visual chronology.
+model DisputeTimelineEvent {
+  id          String   @id @default(cuid())
+  disputeId   String
+  dispute     Dispute  @relation(fields: [disputeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  eventType   String   // OPENED | EVIDENCE_ADDED | MESSAGE_SENT | ESCALATED | ADMIN_REVIEWING | RESOLVED | CLOSED
+  actorId     String?  // null for SYSTEM events
+  actorRole   String   // FILER | AGAINST | ADMIN | SYSTEM
+  description String
+  metadata    String?  // JSON string for extra context (evidenceId, outcome, etc.)
+  createdAt   DateTime @default(now())
+
+  @@index([disputeId, createdAt])
+  @@index([eventType])
 }
 
 model Review {
@@ -571,4 +622,34 @@ model AuditLog {
   @@index([userId])
   @@index([entityType, entityId])
   @@index([recordedAt])
+}
+
+model UserBlock {
+  id         String   @id @default(cuid())
+  blockerId  String
+  blocker    User     @relation("BlockerUser", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedId  String
+  blocked    User     @relation("BlockedUser", fields: [blockedId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
+}
+
+model UserReport {
+  id           String   @id @default(cuid())
+  reporterId   String
+  reporter     User     @relation("ReporterUser", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportedId   String
+  reported     User     @relation("ReportedUser", fields: [reportedId], references: [id], onDelete: Cascade)
+  reason       String   // SPAM, SCAM, HARASSMENT, INAPPROPRIATE, FAKE_LISTING, OTHER
+  description  String?
+  status       String   @default("PENDING")  // PENDING, REVIEWING, RESOLVED, DISMISSED
+  chatRoomId   String?
+  createdAt    DateTime @default(now())
+
+  @@index([reporterId])
+  @@index([reportedId])
+  @@index([status, createdAt])
 }

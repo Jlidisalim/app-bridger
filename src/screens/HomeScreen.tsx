@@ -166,8 +166,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         senderId: trip.travelerId,
     });
 
+    // Disputed deals stay in the active strip — the shipment is still in flight,
+    // just with an open case attached.
     const isActiveStatus = (s: string | undefined) =>
-        ['MATCHED', 'PICKED_UP', 'IN_TRANSIT'].includes(s ?? '');
+        ['MATCHED', 'PICKED_UP', 'IN_TRANSIT', 'DISPUTED'].includes(s ?? '');
 
     const isMyDeal = (item: any) =>
         currentUser?.id &&

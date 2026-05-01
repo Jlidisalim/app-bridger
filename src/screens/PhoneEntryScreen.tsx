@@ -35,14 +35,15 @@ export const PhoneEntryScreen: React.FC<PhoneEntryScreenProps> = ({ onContinue, 
         }
 
         const fullNumber = `${selectedCountry.dialCode}${phoneNumber.replace(/\s/g, '')}`;
-        const parsed = parsePhoneNumberFromString(fullNumber, selectedCountry.code as any);
+        const e164 = fullNumber.replace(/[^\d+]/g, '');
 
-        if (!parsed || !parsed.isValid()) {
+        // Permissive E.164: "+" followed by 8–15 digits (lets test/fake numbers through).
+        if (!/^\+\d{8,15}$/.test(e164)) {
             setError('Please enter a valid phone number');
             return;
         }
 
-        onContinue(parsed.format('E.164'));
+        onContinue(e164);
     };
 
     return (
