@@ -217,7 +217,7 @@ const TravelerPricingWrapper = ({ navigation }: any) => {
 };
 
 const TravelerReviewWrapper = ({ navigation }: any) => {
-  const { travelerRoute, travelerFlight, travelerCapacity, travelerPricing, travelerDescription, clearTravelerFlow, fetchDeals } = useAppStore();
+  const { travelerRoute, travelerFlight, travelerCapacity, travelerPricing, travelerDescription, travelerTransportType, clearTravelerFlow, fetchDeals } = useAppStore();
 
   const handlePublish = async () => {
     try {
@@ -227,6 +227,7 @@ const TravelerReviewWrapper = ({ navigation }: any) => {
         capacity: travelerCapacity,
         pricing: travelerPricing,
         description: travelerDescription,
+        transportType: travelerTransportType,
       } as any);
       if (result.success) {
         clearTravelerFlow();

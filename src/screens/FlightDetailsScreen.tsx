@@ -11,7 +11,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACING, RADIUS } from '../theme/theme';
 import { Typography } from '../components/Typography';
 import { Button } from '../components/Button';
-import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Clock, CalendarClock } from 'lucide-react-native';
+import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Clock, CalendarClock, Plane, Ship, Car } from 'lucide-react-native';
+import { useAppStore } from '../store/useAppStore';
+
+const TRANSPORT_OPTIONS = [
+    { value: 'PLANE' as const, label: 'Plane', Icon: Plane },
+    { value: 'BOAT'  as const, label: 'Boat',  Icon: Ship  },
+    { value: 'ROAD'  as const, label: 'Road',  Icon: Car   },
+];
 
 interface FlightDetailsScreenProps {
     onNext: (flight: any) => void;
@@ -46,6 +53,8 @@ function getCalendarDays(year: number, month: number) {
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 export const FlightDetailsScreen: React.FC<FlightDetailsScreenProps> = ({ onNext, onBack }) => {
+    const transportType = useAppStore((s) => s.travelerTransportType);
+    const setTransportType = useAppStore((s) => s.setTravelerTransportType);
     const now = new Date();
     const [currentYear, setCurrentYear] = useState(now.getFullYear());
     const [currentMonth, setCurrentMonth] = useState(now.getMonth());
@@ -130,6 +139,39 @@ export const FlightDetailsScreen: React.FC<FlightDetailsScreenProps> = ({ onNext
                     <Typography size="md" color={COLORS.background.slate[600]} style={{ marginTop: 12, lineHeight: 24 }}>
                         Tell us when you are traveling so we can match you with shipments.
                     </Typography>
+                </View>
+
+                {/* Transport Type Picker */}
+                <View style={styles.transportSection}>
+                    <Typography size="sm" weight="semibold" color="#0F172A" style={{ marginBottom: 8 }}>
+                        Transport
+                    </Typography>
+                    <View style={styles.transportRow}>
+                        {TRANSPORT_OPTIONS.map(({ value, label, Icon }) => {
+                            const active = transportType === value;
+                            return (
+                                <TouchableOpacity
+                                    key={value}
+                                    onPress={() => setTransportType(value)}
+                                    style={[styles.transportOption, active && styles.transportOptionActive]}
+                                    activeOpacity={0.85}
+                                >
+                                    <Icon
+                                        size={20}
+                                        color={active ? COLORS.white : '#1E3B8A'}
+                                    />
+                                    <Typography
+                                        size="sm"
+                                        weight={active ? 'bold' : 'medium'}
+                                        color={active ? COLORS.white : '#1E3B8A'}
+                                        style={{ marginTop: 4 }}
+                                    >
+                                        {label}
+                                    </Typography>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
                 </View>
 
                 {/* Calendar Card */}
@@ -402,6 +444,28 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.3,
         shadowRadius: 8,
         elevation: 4,
+    },
+    transportSection: {
+        paddingHorizontal: SPACING.xl,
+        marginBottom: SPACING.xl,
+    },
+    transportRow: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    transportOption: {
+        flex: 1,
+        paddingVertical: 14,
+        borderWidth: 1,
+        borderColor: COLORS.background.slate[200],
+        borderRadius: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: COLORS.white,
+    },
+    transportOptionActive: {
+        backgroundColor: '#1E3B8A',
+        borderColor: '#1E3B8A',
     },
     timeSection: {
         paddingHorizontal: SPACING.xl,

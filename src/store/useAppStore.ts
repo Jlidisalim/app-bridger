@@ -69,6 +69,7 @@ interface AppStore {
   travelerPricing: Pricing | null;
   travelerPackageTypes: PackageCategory[];
   travelerDescription: string;
+  travelerTransportType: 'PLANE' | 'BOAT' | 'ROAD';
 
   // --- Deals ---
   deals: Deal[];
@@ -137,6 +138,7 @@ interface AppStore {
   setTravelerPricing: (pricing: Pricing | null) => void;
   setTravelerPackageTypes: (types: PackageCategory[]) => void;
   setTravelerDescription: (description: string) => void;
+  setTravelerTransportType: (type: 'PLANE' | 'BOAT' | 'ROAD') => void;
   clearTravelerFlow: () => void;
 
   // --- Deal Actions ---
@@ -217,6 +219,7 @@ export const useAppStore = create<AppStore>()(
   travelerPricing: null,
   travelerPackageTypes: [],
   travelerDescription: '',
+  travelerTransportType: 'PLANE',
 
   // Deals
   deals: [],
@@ -301,6 +304,7 @@ export const useAppStore = create<AppStore>()(
       travelerPricing: null,
       travelerPackageTypes: [],
       travelerDescription: '',
+      travelerTransportType: 'PLANE',
       // Error
       isLoading: false,
       error: null,
@@ -364,6 +368,7 @@ export const useAppStore = create<AppStore>()(
   setTravelerPricing: (pricing) => set({ travelerPricing: pricing }),
   setTravelerPackageTypes: (types) => set({ travelerPackageTypes: types }),
   setTravelerDescription: (description) => set({ travelerDescription: description }),
+  setTravelerTransportType: (type) => set({ travelerTransportType: type }),
   clearTravelerFlow: () =>
     set({
       travelerRoute: null,
@@ -372,6 +377,7 @@ export const useAppStore = create<AppStore>()(
       travelerPricing: null,
       travelerPackageTypes: [],
       travelerDescription: '',
+      travelerTransportType: 'PLANE',
     }),
 
   // --- Deal Actions ---

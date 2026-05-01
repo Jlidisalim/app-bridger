@@ -13,7 +13,7 @@
  */
 import { useState, useEffect, useCallback } from 'react'
 import {
-  AlertTriangle, Plane, Car, Bus, Star, Flag, Ban,
+  AlertTriangle, Plane, Car, Bus, Ship, Star, Flag, Ban,
   Eye, Search, ChevronDown, MapPin, Loader2, AlertCircle,
   X, Calendar, User, Shield
 } from 'lucide-react'
@@ -23,10 +23,16 @@ import RiskBadge from '../components/shared/RiskBadge'
 import Pagination from '../components/shared/Pagination'
 import ConfirmModal from '../components/shared/ConfirmModal'
 import ExportButton from '../components/shared/ExportButton'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import api from '../services/api'
 
 const TRANSPORT_ICON = { plane: Plane, car: Car, bus: Bus }
+
+const TRANSPORT_META = {
+  PLANE: { label: 'Plane', icon: Plane, color: '#3B82F6' },
+  BOAT:  { label: 'Boat',  icon: Ship,  color: '#0EA5E9' },
+  ROAD:  { label: 'Road',  icon: Car,   color: '#10B981' },
+}
 const INIT_COLORS    = ['bg-blue-200 text-blue-700','bg-purple-200 text-purple-700','bg-rose-200 text-rose-700','bg-emerald-200 text-emerald-700','bg-amber-200 text-amber-700','bg-indigo-200 text-indigo-700','bg-teal-200 text-teal-700','bg-orange-200 text-orange-700']
 
 const BACKEND_STATUS_MAP = {
@@ -201,6 +207,57 @@ function TripDrawer({ open, trip, detail, loading, error, onClose }) {
   )
 }
 
+function TransportMixCard({ data }) {
+  const total = data.reduce((sum, d) => sum + (d.value ?? 0), 0)
+  return (
+    <div className="bg-surface-container-lowest rounded-xl shadow-card border border-surface-container p-4 flex items-center gap-4">
+      <div className="relative w-[88px] h-[88px] flex-shrink-0">
+        {total > 0 ? (
+          <ResponsiveContainer>
+            <PieChart>
+              <Pie
+                data={data}
+                dataKey="value"
+                innerRadius={28}
+                outerRadius={42}
+                paddingAngle={2}
+                stroke="none"
+              >
+                {data.map((d, i) => <Cell key={i} fill={d.color} />)}
+              </Pie>
+              <Tooltip formatter={(v, name) => [`${v} trips`, name]} />
+            </PieChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="absolute inset-0 rounded-full border-4 border-surface-container" />
+        )}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <span className="text-base font-bold text-on-surface">{total}</span>
+        </div>
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[10px] font-bold tracking-[0.15em] uppercase text-on-surface-variant/60 mb-2">Transport Mix</p>
+        <ul className="space-y-1">
+          {data.length === 0 && (
+            <li className="text-xs text-on-surface-variant italic">No data</li>
+          )}
+          {data.map(d => (
+            <li key={d.name} className="flex items-center justify-between text-xs">
+              <span className="flex items-center gap-1.5 text-on-surface">
+                <span className="w-2 h-2 rounded-full" style={{ background: d.color }} />
+                {d.name}
+              </span>
+              <span className="text-on-surface-variant tabular-nums">
+                {d.value} <span className="text-on-surface-variant/60">({total > 0 ? Math.round(d.value / total * 100) : 0}%)</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  )
+}
+
 function Stars({ rating }) {
   return (
     <div className="flex items-center gap-1">
@@ -221,6 +278,9 @@ export default function TripPosts() {
   const [loading,      setLoading]      = useState(true)
   const [error,        setError]        = useState(null)
   const [corridors,    setCorridors]    = useState([])
+  const [topDestinations, setTopDestinations] = useState([])
+  const [topDepartures,   setTopDepartures]   = useState([])
+  const [transportMix,    setTransportMix]    = useState([])
 
   // Drawer state
   const [drawerTrip, setDrawerTrip] = useState(null)
@@ -265,6 +325,25 @@ export default function TripPosts() {
         )
       })
       .catch(() => { /* corridors are optional — fail silently */ })
+  }, [])
+
+  // Fetch top-5 destinations + top-5 departures for the lower charts
+  useEffect(() => {
+    api.get('/admin/trips/stats')
+      .then(r => {
+        const toRow = (x) => ({
+          name: x.country ? `${x.city}, ${x.country}` : x.city,
+          count: x.count,
+        })
+        setTopDestinations((r.data.topDestinations ?? []).map(toRow))
+        setTopDepartures((r.data.topDepartures ?? []).map(toRow))
+        setTransportMix((r.data.byTransport ?? []).map(x => ({
+          name: TRANSPORT_META[x.type]?.label ?? x.type,
+          value: x.count,
+          color: TRANSPORT_META[x.type]?.color ?? '#9CA3AF',
+        })))
+      })
+      .catch(() => { /* optional — fail silently */ })
   }, [])
 
   const highRisk = trips.filter(t => (t.mlScore ?? 0) > 60)
@@ -382,7 +461,7 @@ export default function TripPosts() {
       <div className="grid grid-cols-3 gap-4">
         <KpiCard label="Total Trips"      value={total.toLocaleString()}    changeType="neutral" icon={<MapPin className="w-4 h-4 text-blue-600" />}    accentColor="#3B82F6" />
         <KpiCard label="High Risk"        value={highRisk.length.toString()} sublabel="flagged on this page" changeType="neutral" icon={<AlertTriangle className="w-4 h-4 text-red-600" />}  accentColor="#DC2626" />
-        <KpiCard label="This Page"        value={trips.length.toString()}    sublabel={`of ${total}`} changeType="neutral" icon={<MapPin className="w-4 h-4 text-emerald-600" />} accentColor="#059669" />
+        <TransportMixCard data={transportMix} />
       </div>
 
       {/* ML Anomaly Banner */}
@@ -414,7 +493,7 @@ export default function TripPosts() {
             <input
               value={searchInput}
               onChange={e => setSearchInput(e.target.value)}
-              placeholder="Search city or route…"
+              placeholder="Search by departure or destination…"
               className="w-full pl-9 pr-4 py-2 text-sm bg-surface-container rounded-lg border border-transparent focus:border-primary/30 outline-none"
             />
           </div>
@@ -443,14 +522,14 @@ export default function TripPosts() {
             <table className="w-full text-left">
               <thead className="bg-surface-container-low/40">
                 <tr>
-                  {['Route', 'Traveler', 'Date', 'Capacity / Price', 'Status', 'Actions'].map(h => (
+                  {['Route', 'Traveler', 'Date', 'Transport', 'Price', 'Risk', 'Status', 'Actions'].map(h => (
                     <th key={h} className="px-5 py-3.5 text-[10px] font-semibold tracking-widest uppercase text-on-surface-variant whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {trips.map((trip, idx) => {
-                  const TransIcon   = Plane // flightNumber present → plane; no transport field in schema
+                  const TransIcon   = (TRANSPORT_META[trip.transportType] ?? TRANSPORT_META.PLANE).icon
                   const uiStatus    = BACKEND_STATUS_MAP[trip.status] ?? trip.status?.toLowerCase()
                   const travelerName = trip.traveler?.name ?? '—'
 
@@ -479,12 +558,26 @@ export default function TripPosts() {
                       <td className="px-5 py-4 text-sm text-on-surface-variant whitespace-nowrap">
                         {trip.departureDate ? new Date(trip.departureDate).toLocaleDateString() : '—'}
                       </td>
-                      <td className="px-5 py-4">
-                        <p className="text-sm font-medium text-on-surface">{trip.maxWeight}kg remaining</p>
-                        <p className="text-xs text-on-surface-variant">
+                      <td className="px-5 py-4 whitespace-nowrap">
+                        {(() => {
+                          const meta = TRANSPORT_META[trip.transportType] ?? TRANSPORT_META.PLANE
+                          const Icon = meta.icon
+                          return (
+                            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium" style={{ background: `${meta.color}1A`, color: meta.color }}>
+                              <Icon className="w-3.5 h-3.5" />
+                              {meta.label}
+                            </span>
+                          )
+                        })()}
+                      </td>
+                      <td className="px-5 py-4 whitespace-nowrap">
+                        <p className="text-sm font-medium text-on-surface">
                           {trip.currency} {Number(trip.price ?? 0).toLocaleString()}/kg
-                          {trip.negotiable && ' · Negotiable'}
                         </p>
+                        {trip.negotiable && <p className="text-[10px] text-on-surface-variant">Negotiable</p>}
+                      </td>
+                      <td className="px-5 py-4">
+                        <RiskBadge score={Math.round(trip.mlScore ?? 0)} />
                       </td>
                       <td className="px-5 py-4"><StatusBadge status={uiStatus} /></td>
                       <td className="px-5 py-4">
@@ -533,23 +626,27 @@ export default function TripPosts() {
         <div className="bg-surface-container-lowest rounded-xl shadow-card border border-surface-container p-5">
           <h3 className="text-sm font-semibold text-on-surface mb-4">Top Corridors</h3>
           {corridors.length > 0 ? (
-            <div className="grid grid-cols-2 gap-3">
-              {corridors.map((c, idx) => (
-                <div key={c.name} className="bg-surface-container rounded-xl p-4 hover:shadow-md transition-shadow">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white ${['bg-blue-600', 'bg-purple-600', 'bg-emerald-600', 'bg-amber-600'][idx % 4]}`}>
-                      {idx + 1}
-                    </span>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60">Corridor</span>
-                  </div>
-                  <p className="text-sm font-semibold text-on-surface mb-1">{c.name}</p>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-on-surface-variant">{c.count} trips</span>
-                    <span className="text-xs font-semibold text-primary">{c.pct}%</span>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <ResponsiveContainer width="100%" height={Math.max(160, corridors.length * 44)}>
+              <BarChart
+                data={corridors}
+                layout="vertical"
+                margin={{ top: 4, right: 24, left: 8, bottom: 4 }}
+                barCategoryGap="20%"
+              >
+                <CartesianGrid horizontal={false} stroke="#E5E7EB" />
+                <XAxis type="number" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  tick={{ fontSize: 11 }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={140}
+                />
+                <Tooltip formatter={v => [`${v} trips`, 'Volume']} cursor={{ fill: 'rgba(26,46,130,0.05)' }} />
+                <Bar dataKey="count" fill="#1A2E82" radius={[0, 6, 6, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           ) : (
             <p className="text-sm text-on-surface-variant text-center py-8">No route data yet</p>
           )}
@@ -557,18 +654,57 @@ export default function TripPosts() {
 
         <div className="bg-surface-container-lowest rounded-xl shadow-card border border-surface-container p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-on-surface">Trips This Page</h3>
+            <h3 className="text-sm font-semibold text-on-surface">Top 5 Destinations</h3>
             <span className="text-[10px] font-bold px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full">LIVE DATA</span>
           </div>
-          <ResponsiveContainer width="100%" height={130}>
-            <BarChart data={trips.map((t, i) => ({ name: `#${i + 1}`, weight: t.maxWeight ?? 0 }))} barSize={8}>
-              <XAxis dataKey="name" tick={{ fontSize: 9 }} tickLine={false} />
-              <YAxis hide />
-              <Tooltip formatter={v => [`${v}kg`, 'Max Weight']} />
-              <Bar dataKey="weight" fill="#1A2E82" radius={[3, 3, 0, 0]} />
+          {topDestinations.length > 0 ? (
+            <ResponsiveContainer width="100%" height={Math.max(180, topDestinations.length * 44)}>
+              <BarChart
+                data={topDestinations}
+                layout="vertical"
+                margin={{ top: 4, right: 24, left: 8, bottom: 4 }}
+                barCategoryGap="20%"
+              >
+                <CartesianGrid horizontal={false} stroke="#E5E7EB" />
+                <XAxis type="number" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={140} />
+                <Tooltip formatter={v => [`${v} trips`, 'Volume']} cursor={{ fill: 'rgba(26,46,130,0.05)' }} />
+                <Bar dataKey="count" fill="#1A2E82" radius={[0, 6, 6, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="text-sm text-on-surface-variant text-center py-12">No destination data yet</p>
+          )}
+        </div>
+      </div>
+
+      {/* Top 5 Departures — where trips originate from */}
+      <div className="bg-surface-container-lowest rounded-xl shadow-card border border-surface-container p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-sm font-semibold text-on-surface">Top 5 Departures</h3>
+            <p className="text-xs text-on-surface-variant mt-0.5">Most common origin cities</p>
+          </div>
+          <span className="text-[10px] font-bold px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full">LIVE DATA</span>
+        </div>
+        {topDepartures.length > 0 ? (
+          <ResponsiveContainer width="100%" height={Math.max(180, topDepartures.length * 44)}>
+            <BarChart
+              data={topDepartures}
+              layout="vertical"
+              margin={{ top: 4, right: 24, left: 8, bottom: 4 }}
+              barCategoryGap="20%"
+            >
+              <CartesianGrid horizontal={false} stroke="#E5E7EB" />
+              <XAxis type="number" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} />
+              <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={140} />
+              <Tooltip formatter={v => [`${v} trips`, 'Volume']} cursor={{ fill: 'rgba(16,185,129,0.05)' }} />
+              <Bar dataKey="count" fill="#10B981" radius={[0, 6, 6, 0]} />
             </BarChart>
           </ResponsiveContainer>
-        </div>
+        ) : (
+          <p className="text-sm text-on-surface-variant text-center py-12">No departure data yet</p>
+        )}
       </div>
 
       <ConfirmModal

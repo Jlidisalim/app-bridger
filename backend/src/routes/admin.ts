@@ -271,6 +271,49 @@ router.get('/transactions', async (req: Request, res: Response, next: NextFuncti
   } catch (err) { next(err); }
 });
 
+// ── Trip Visualisation Stats ──────────────────────────────────────────────────
+
+/** GET /admin/trips/stats — top 5 destinations + departures + transport mix. */
+router.get('/trips/stats', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const [topDestinations, topDepartures, byTransport] = await Promise.all([
+      prisma.trip.groupBy({
+        by: ['toCity', 'toCountry'],
+        _count: { id: true },
+        orderBy: { _count: { id: 'desc' } },
+        take: 5,
+      }),
+      prisma.trip.groupBy({
+        by: ['fromCity', 'fromCountry'],
+        _count: { id: true },
+        orderBy: { _count: { id: 'desc' } },
+        take: 5,
+      }),
+      prisma.trip.groupBy({
+        by: ['transportType'],
+        _count: { id: true },
+      }),
+    ]);
+
+    res.json({
+      topDestinations: topDestinations.map(r => ({
+        city: r.toCity,
+        country: r.toCountry,
+        count: r._count.id,
+      })),
+      topDepartures: topDepartures.map(r => ({
+        city: r.fromCity,
+        country: r.fromCountry,
+        count: r._count.id,
+      })),
+      byTransport: byTransport.map(r => ({
+        type: r.transportType,
+        count: r._count.id,
+      })),
+    });
+  } catch (err) { next(err); }
+});
+
 // ── Generated Reports ─────────────────────────────────────────────────────────
 
 /** GET /admin/reports — virtual report list derived from live DB stats */

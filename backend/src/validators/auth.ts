@@ -139,6 +139,8 @@ export const verifyQRSchema = z.object({
 });
 
 // Trip validators
+export const TRANSPORT_TYPES = ['PLANE', 'BOAT', 'ROAD'] as const;
+
 export const createTripSchema = z.object({
   fromCity: z.string().min(2).max(50),
   toCity: z.string().min(2).max(50),
@@ -152,6 +154,7 @@ export const createTripSchema = z.object({
   }),
   departureTime: z.string().max(20).optional(),
   flightNumber: z.string().max(20).optional(),
+  transportType: z.enum(TRANSPORT_TYPES).default('PLANE'),
   maxWeight: z.number().positive().max(50).default(1.0),
   price: z.number().min(0).max(10000),
   currency: z.string().length(3).default('USD'),
@@ -170,6 +173,7 @@ export const updateTripSchema = z.object({
   }),
   departureTime: z.string().max(20).optional(),
   flightNumber: z.string().max(20).optional(),
+  transportType: z.enum(TRANSPORT_TYPES).optional(),
   maxWeight: z.number().positive().max(50).optional(),
   price: z.number().positive().max(10000).optional(),
   currency: z.string().length(3).optional(),

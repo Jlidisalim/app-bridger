@@ -149,6 +149,7 @@ export const dealsAPI = {
     flight: any;
     capacity: number;
     pricing: any;
+    transportType?: 'PLANE' | 'BOAT' | 'ROAD';
   }): Promise<{ success: boolean; tripId: string }> => {
     if (!data.route) throw new Error('Route is required');
     if (!data.pricing) throw new Error('Pricing is required');
@@ -173,6 +174,7 @@ export const dealsAPI = {
       departureDate,
       departureTime: data.flight?.time || undefined,
       flightNumber: data.flight?.flightNumber || undefined,
+      transportType: data.transportType || 'PLANE',
       maxWeight: data.capacity,
       price: data.pricing.amount,
       currency: data.pricing.currency || 'USD',

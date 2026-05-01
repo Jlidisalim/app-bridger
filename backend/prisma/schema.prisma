@@ -353,6 +353,7 @@ model Trip {
   departureDate DateTime?
   departureTime String?
   flightNumber  String?
+  transportType String    @default("PLANE")  // PLANE | BOAT | ROAD
   maxWeight     Float     @default(1.0)
   price         Float
   currency      String    @default("USD")

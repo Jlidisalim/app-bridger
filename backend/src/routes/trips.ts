@@ -75,7 +75,7 @@ router.get('/popular-routes', async (_req, res, next) => {
 // POST /trips - Create trip
 router.post('/', authenticate, validate(createTripSchema), async (req: any, res, next) => {
   try {
-    const { fromCity, toCity, fromCountry, toCountry, departureDate, departureTime, flightNumber, maxWeight, price, currency, negotiable } = req.validated || req.body;
+    const { fromCity, toCity, fromCountry, toCountry, departureDate, departureTime, flightNumber, transportType, maxWeight, price, currency, negotiable } = req.validated || req.body;
 
     const trip = await prisma.trip.create({
       data: {
@@ -87,6 +87,7 @@ router.post('/', authenticate, validate(createTripSchema), async (req: any, res,
         departureDate: departureDate ? new Date(departureDate) : null,
         departureTime: departureTime || null,
         flightNumber: flightNumber || null,
+        transportType: transportType || 'PLANE',
         maxWeight: maxWeight || 1.0,
         price,
         currency: currency || 'USD',
