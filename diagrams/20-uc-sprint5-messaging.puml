@@ -1,0 +1,52 @@
+@startuml
+title Raffinement — Cas d'Utilisation « Messagerie Temps Réel »
+
+left to right direction
+skinparam actorStyle awesome
+
+actor "Expéditeur" as Sender
+actor "Voyageur" as Traveler
+actor "Socket.io" as WS
+actor "Cloudinary" as Cloud
+
+rectangle "Messagerie temps réel (Socket.io)" {
+  usecase "Consulter la liste\ndes conversations" as UC1
+  usecase "Voir le dernier message\net statut de lecture" as UC2
+  usecase "Ouvrir une\nconversation" as UC3
+  usecase "Charger l'historique\ndes messages" as UC4
+  usecase "Envoyer un\nmessage texte" as UC5
+  usecase "Envoyer une image" as UC6
+  usecase "Envoyer un\ndocument" as UC7
+  usecase "Recevoir un message\nen temps réel" as UC8
+  usecase "Marquer les messages\ncomme lus" as UC9
+  usecase "Recevoir une notification\npush (si app en arrière-plan)" as UC10
+}
+
+Sender --> UC1
+Sender --> UC3
+Sender --> UC5
+Sender --> UC6
+Sender --> UC7
+
+Traveler --> UC1
+Traveler --> UC3
+Traveler --> UC5
+Traveler --> UC6
+Traveler --> UC7
+
+UC1 ..> UC2 : <<include>>
+UC3 ..> UC4 : <<include>>
+UC3 ..> UC9 : <<include>>
+UC5 --> WS
+UC8 --> WS
+UC6 --> Cloud
+UC7 --> Cloud
+UC8 ..> UC10 : <<extend>>
+
+note bottom of UC5
+  Protocole WebSocket
+  via Socket.io
+  Latence < 100ms
+end note
+
+@enduml

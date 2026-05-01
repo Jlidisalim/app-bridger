@@ -1,0 +1,64 @@
+@startuml
+title Diagramme de Séquence — Authentification OTP WhatsApp
+
+skinparam sequenceArrowThickness 2
+skinparam sequenceParticipant underline
+
+actor "Utilisateur" as User
+participant "Application\nMobile\n(React Native)" as App
+participant "Backend API\n(Express.js)" as Backend
+database "Base de\nDonnées\n(Prisma)" as DB
+participant "Serveur\nBaileys\n(WhatsApp)" as Baileys
+
+== Phase 1 : Envoi du code OTP ==
+
+User -> App : Saisir le numéro\nde téléphone
+App -> App : Valider le format\n(libphonenumber-js)
+App -> Backend : POST /api/auth/send-otp\n{ phone: "+216XXXXXXXX" }
+Backend -> Backend : Générer code OTP\n(6 chiffres aléatoires)
+Backend -> DB : Enregistrer OTP\n(phone, code, expiresAt = now + 5min)
+Backend -> Baileys : POST /send-otp\n{ phone, code }
+Baileys -> Baileys : Envoyer message\nWhatsApp avec code
+Baileys --> Backend : 200 OK (envoyé)
+Backend --> App : 200 OK\n{ message: "OTP envoyé" }
+App --> User : Afficher l'écran\nde saisie OTP
+
+== Phase 2 : Vérification du code OTP ==
+
+User -> App : Saisir le code OTP\n(6 chiffres)
+App -> Backend : POST /api/auth/verify-otp\n{ phone, code }
+Backend -> DB : Rechercher OTP\n(phone, verified=false)
+
+alt Code valide et non expiré
+  Backend -> DB : Marquer OTP verified=true
+  Backend -> DB : Rechercher User\npar phone
+
+  alt Nouvel utilisateur
+    Backend -> DB : Créer User\n(phone, kycStatus=PENDING)
+  end
+
+  Backend -> Backend : Générer JWT\n(accessToken 15min\n+ refreshToken 7j)
+  Backend -> DB : Créer Session\n(userId, token, refreshToken)
+  Backend --> App : 200 OK\n{ accessToken, refreshToken,\nuser, isNewUser }
+
+  alt Nouvel utilisateur (isNewUser=true)
+    App --> User : Rediriger vers\nKYC Upload
+  else Utilisateur existant
+    App --> User : Rediriger vers\nHome Screen
+  end
+
+else Code invalide
+  Backend -> DB : Incrémenter\nattempts (+1)
+  Backend --> App : 401 Unauthorized\n{ error: "Code invalide" }
+  App --> User : Afficher message\nd'erreur
+
+else Code expiré
+  Backend --> App : 401 Unauthorized\n{ error: "Code expiré" }
+  App --> User : Proposer\nrenvoyer le code
+
+else Tentatives max atteintes (>= 3)
+  Backend --> App : 429 Too Many Requests\n{ error: "Trop de tentatives" }
+  App --> User : Bloquer et proposer\nrenvoyer un nouveau code
+end
+
+@enduml

@@ -1,0 +1,43 @@
+@startuml
+title Diagramme de Cas d'Utilisation Global — Sprint 2\n(Authentification, Onboarding et Vérification KYC)
+
+left to right direction
+skinparam actorStyle awesome
+
+actor "Utilisateur\n(nouveau)" as User
+actor "Service IA\nVérification\nFaciale" as FaceAI
+actor "Service\nWhatsApp\n(Baileys)" as WhatsApp
+
+rectangle "Sprint 2 — Authentification & KYC" {
+  usecase "Parcourir\nl'onboarding" as UC_Onboard
+  usecase "Saisir le numéro\nde téléphone" as UC_Phone
+  usecase "Recevoir un\ncode OTP" as UC_OTP
+  usecase "Vérifier le\ncode OTP" as UC_VerifyOTP
+  usecase "Uploader le document\nd'identité (recto/verso)" as UC_KYCDoc
+  usecase "Prendre un selfie\npour vérification IA" as UC_Selfie
+  usecase "Comparer selfie vs\ndocument (ArcFace)" as UC_FaceMatch
+  usecase "Consulter le\nstatut KYC" as UC_KYCStatus
+  usecase "Accéder à\nl'application" as UC_Access
+}
+
+User --> UC_Onboard
+User --> UC_Phone
+User --> UC_VerifyOTP
+User --> UC_KYCDoc
+User --> UC_Selfie
+User --> UC_KYCStatus
+User --> UC_Access
+
+UC_Phone ..> UC_OTP : <<include>>
+UC_OTP --> WhatsApp
+UC_Selfie ..> UC_FaceMatch : <<include>>
+UC_FaceMatch --> FaceAI
+UC_KYCStatus ..> UC_Access : <<extend>>
+
+note right of UC_FaceMatch
+  RetinaFace : détection du visage
+  ArcFace : embedding 512-d
+  Similarité cosinus >= 0.6
+end note
+
+@enduml

@@ -1,0 +1,53 @@
+@startuml
+title Raffinement — Cas d'Utilisation « Vérification KYC Biométrique »
+
+left to right direction
+skinparam actorStyle awesome
+
+actor "Utilisateur" as User
+actor "Service IA\n(FastAPI +\nInsightFace)" as AI
+actor "Cloudinary" as Cloud
+
+rectangle "Vérification KYC Biométrique" {
+  usecase "Choisir le type\nde document" as UC1
+  usecase "Photographier le\ndocument (recto)" as UC2
+  usecase "Photographier le\ndocument (verso)" as UC3
+  usecase "Uploader les images\nvers Cloudinary" as UC4
+  usecase "Prendre un selfie\nen temps réel" as UC5
+  usecase "Détecter le visage\n(RetinaFace)" as UC6
+  usecase "Extraire l'embedding\nfacial (ArcFace 512-d)" as UC7
+  usecase "Comparer selfie vs\nphoto du document" as UC8
+  usecase "Calculer le score\nde similarité cosinus" as UC9
+  usecase "Afficher résultat :\nVÉRIFIÉ (>= 0.6)" as UC10
+  usecase "Afficher résultat :\nÉCHOUÉ (< 0.6)" as UC11
+  usecase "Stocker l'embedding\nen base de données" as UC12
+}
+
+User --> UC1
+User --> UC2
+User --> UC3
+User --> UC5
+
+UC2 ..> UC4 : <<include>>
+UC3 ..> UC4 : <<include>>
+UC4 --> Cloud
+
+UC5 ..> UC6 : <<include>>
+UC6 ..> UC7 : <<include>>
+UC7 ..> UC8 : <<include>>
+UC8 ..> UC9 : <<include>>
+UC6 --> AI
+UC7 --> AI
+
+UC9 ..> UC10 : <<extend>>
+UC9 ..> UC11 : <<extend>>
+UC10 ..> UC12 : <<include>>
+
+note right of UC1
+  Types acceptés :
+  - Carte nationale d'identité
+  - Passeport
+  - Permis de conduire
+end note
+
+@enduml

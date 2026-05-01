@@ -1,0 +1,80 @@
+@startuml
+title Diagramme de Séquence — Confirmation de Livraison via QR Code
+
+skinparam sequenceArrowThickness 2
+
+actor "Expéditeur" as Sender
+actor "Voyageur" as Traveler
+participant "App\nExpéditeur" as AppS
+participant "App\nVoyageur" as AppT
+participant "Backend API\n(Express.js)" as Backend
+participant "Stripe" as Stripe
+database "Base de\nDonnées" as DB
+participant "Socket.io" as WS
+
+== Phase 1 : Prise en charge du colis (PICKUP) ==
+
+Sender -> AppS : Ouvrir le suivi\nde livraison
+AppS -> AppS : Afficher QR code\ndu deal (react-native-qrcode-svg)
+
+Traveler -> AppT : Scanner le QR code\nde l'expéditeur (expo-camera)
+AppT -> AppT : Décoder QR data\n(dealId, signature HMAC)
+AppT -> Backend : POST /api/deals/:dealId/pickup\n{ qrData, scannedSignature }
+
+Backend -> Backend : Vérifier la signature\nHMAC du QR code
+Backend -> DB : Vérifier le Deal\n(status == MATCHED)
+
+alt Signature valide
+  Backend -> DB : Mettre à jour Deal\n(status = PICKED_UP)
+  Backend -> DB : Créer TrackingEvent\n(status = PICKED_UP,\nlocation = "Point de collecte")
+  Backend -> WS : Émettre "deal-picked-up"\n(senderId)
+  WS --> AppS : Notification :\n"Colis pris en charge\npar le voyageur"
+  Backend --> AppT : 200 OK\n{ status: "PICKED_UP" }
+  AppT --> Traveler : "Colis pris en charge !"
+else Signature invalide
+  Backend --> AppT : 403 Forbidden\n{ error: "QR code invalide" }
+  AppT --> Traveler : "QR code non valide.\nVeuillez réessayer."
+end
+
+== Phase 2 : Transit ==
+
+Traveler -> AppT : Mettre à jour le statut\n"En transit"
+AppT -> Backend : POST /api/deals/:dealId/tracking\n{ status: "IN_TRANSIT",\nlocation: "Aéroport" }
+Backend -> DB : Créer TrackingEvent\n(IN_TRANSIT)
+Backend -> WS : Émettre "deal-in-transit"
+WS --> AppS : Notification :\n"Colis en transit"
+
+== Phase 3 : Livraison et libération du paiement ==
+
+Traveler -> AppT : Arrivé à destination
+Traveler -> AppT : Scanner le QR code\nde confirmation livraison
+
+AppT -> Backend : POST /api/deals/:dealId/deliver\n{ qrData, scannedSignature }
+Backend -> Backend : Vérifier la signature HMAC
+Backend -> DB : Vérifier Deal\n(status == IN_TRANSIT)
+
+Backend -> DB : Mettre à jour Deal\n(status = DELIVERED)
+Backend -> DB : Créer TrackingEvent\n(DELIVERED)
+
+' === Libération du paiement escrow ===
+Backend -> Stripe : Libérer le paiement escrow\n(release PaymentIntent)
+Stripe --> Backend : 200 OK (paiement libéré)
+
+Backend -> Backend : Calculer commission\nplateforme (5%)
+Backend -> DB : Créer Transaction\n(type = COMMISSION,\namount = prix × 0.05)
+Backend -> DB : Créer Transaction\n(type = PAYOUT,\namount = prix × 0.95)
+Backend -> DB : Mettre à jour Wallet\ntraveler (balance += prix × 0.95)
+
+Backend -> DB : Mettre à jour Deal\n(status = COMPLETED)
+Backend -> DB : Créer TrackingEvent\n(COMPLETED)
+
+Backend -> WS : Émettre "deal-completed"
+WS --> AppS : Notification :\n"Colis livré avec succès !\nVeuillez évaluer le voyageur."
+WS --> AppT : Notification :\n"Livraison confirmée !\nPaiement reçu dans le wallet."
+
+Backend -> DB : Créer Notification\n(senderId + travelerId)
+
+Backend --> AppT : 200 OK\n{ status: "COMPLETED",\npayoutAmount: XX.XX }
+AppT --> Traveler : "Livraison confirmée !\nVous avez reçu XX.XX USD"
+
+@enduml

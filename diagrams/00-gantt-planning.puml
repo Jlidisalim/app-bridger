@@ -1,0 +1,49 @@
+@startgantt
+title Diagramme de Gantt — Planning Prévisionnel du Projet Bridger
+
+Project starts 2025-02-03
+
+-- Sprint 1 : Spécification et Conception --
+[Identification des acteurs] starts 2025-02-03 and lasts 2 days
+[Besoins fonctionnels et non fonctionnels] starts 2025-02-05 and lasts 2 days
+[Diagramme de cas d'utilisation global] starts 2025-02-07 and lasts 3 days
+[Diagramme de classes global] starts 2025-02-10 and lasts 5 days
+[Architecture et choix techniques] starts 2025-02-15 and lasts 3 days
+[Environnement de développement] starts 2025-02-18 and lasts 3 days
+
+-- Sprint 2 : Authentification et KYC --
+[Inscription WhatsApp OTP] starts 2025-02-24 and lasts 3 days
+[Vérification OTP] starts 2025-02-27 and lasts 2 days
+[Onboarding (3 écrans)] starts 2025-03-01 and lasts 1 days
+[Upload document identité (KYC)] starts 2025-03-03 and lasts 3 days
+[Vérification faciale IA (selfie)] starts 2025-03-06 and lasts 3 days
+[Statut KYC et résultat] starts 2025-03-09 and lasts 2 days
+[Tests sprint 2] starts 2025-03-11 and lasts 2 days
+
+-- Sprint 3 : Espace Expéditeur --
+[Interface Home (tableau de bord)] starts 2025-03-17 and lasts 3 days
+[Interface Explore (filtres)] starts 2025-03-20 and lasts 3 days
+[Création annonce colis (multi-étapes)] starts 2025-03-23 and lasts 5 days
+[Suggestion prix IA] starts 2025-03-28 and lasts 2 days
+[Suivi livraison + QR code] starts 2025-03-30 and lasts 3 days
+[Tests sprint 3] starts 2025-04-02 and lasts 2 days
+
+-- Sprint 4 : Espace Voyageur --
+[Création trajet (multi-étapes)] starts 2025-04-07 and lasts 4 days
+[Gestion des deals reçus] starts 2025-04-11 and lasts 3 days
+[Acceptation/refus de deal] starts 2025-04-14 and lasts 2 days
+[Scan QR remise/livraison] starts 2025-04-16 and lasts 3 days
+[Tracking temps réel] starts 2025-04-19 and lasts 2 days
+[Tests sprint 4] starts 2025-04-21 and lasts 2 days
+
+-- Sprint 5 : Messagerie, Paiement, Avis --
+[Messagerie temps réel Socket.io] starts 2025-04-28 and lasts 3 days
+[Paiement escrow Stripe] starts 2025-05-01 and lasts 3 days
+[Wallet (dépôt/retrait)] starts 2025-05-04 and lasts 2 days
+[Évaluations post-livraison] starts 2025-05-06 and lasts 2 days
+[Système de litiges] starts 2025-05-08 and lasts 2 days
+[Profil et paramètres] starts 2025-05-10 and lasts 2 days
+[Notifications push] starts 2025-05-12 and lasts 2 days
+[Tests sprint 5] starts 2025-05-14 and lasts 2 days
+
+@endgantt

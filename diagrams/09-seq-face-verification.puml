@@ -1,0 +1,64 @@
+@startuml
+title Diagramme de Séquence — Vérification Faciale IA\n(Selfie vs Document d'Identité)
+
+skinparam sequenceArrowThickness 2
+
+actor "Utilisateur" as User
+participant "Application\nMobile\n(React Native)" as App
+participant "Backend API\n(Express.js)" as Backend
+participant "Cloudinary" as Cloud
+participant "Service IA\n(FastAPI +\nInsightFace)" as FaceAI
+database "Base de\nDonnées\n(Prisma)" as DB
+
+== Phase 1 : Upload du document d'identité ==
+
+User -> App : Choisir type document\n(CNI / Passeport / Permis)
+User -> App : Photographier le\ndocument (recto + verso)
+App -> Backend : POST /api/verification/kyc-documents\n{ type, frontImage, backImage }
+Backend -> Cloud : Upload images\n(recto + verso)
+Cloud --> Backend : URLs des images
+Backend -> DB : Créer KycDocument\n(userId, type, frontUrl,\nbackUrl, status=PENDING)
+Backend --> App : 200 OK\n{ documentId }
+
+== Phase 2 : Selfie et vérification IA ==
+
+User -> App : Prendre un selfie\n(expo-camera)
+App -> Backend : POST /api/verification/face-verify\n{ selfieImage, documentId }
+Backend -> Cloud : Upload selfie
+Cloud --> Backend : URL du selfie
+
+Backend -> DB : Récupérer KycDocument\n(frontImageUrl)
+
+Backend -> FaceAI : POST /verify\n{ selfie_url,\ndocument_url }
+
+FaceAI -> FaceAI : **RetinaFace**\nDétecter les visages\ndans les 2 images
+
+alt Visages détectés dans les 2 images
+  FaceAI -> FaceAI : **ArcFace**\nExtraire embedding selfie\n(vecteur 512 dimensions)
+  FaceAI -> FaceAI : **ArcFace**\nExtraire embedding document\n(vecteur 512 dimensions)
+  FaceAI -> FaceAI : **Similarité cosinus**\nentre les 2 embeddings
+  FaceAI --> Backend : { match: true/false,\nconfidence: 0.XX,\nembedding: [...512 floats] }
+
+  alt Confidence >= 0.6 (MATCH)
+    Backend -> DB : Mettre à jour User\n(faceVerificationStatus=VERIFIED\nfaceConfidenceScore=0.XX\nfaceEmbedding=[...512-d]\nfaceVerifiedAt=now())
+    Backend -> DB : Créer FaceScan\n(status=SUCCESS,\nconfidenceScore=0.XX)
+    Backend -> DB : Mettre à jour KycDocument\n(status=APPROVED)
+    Backend -> DB : Mettre à jour User\n(kycStatus=APPROVED,\nverified=true)
+    Backend --> App : 200 OK\n{ verified: true,\nconfidence: 0.87 }
+    App --> User : Afficher : "Identité vérifiée"\nRediriger vers Home
+
+  else Confidence < 0.6 (NO MATCH)
+    Backend -> DB : Mettre à jour User\n(faceVerificationStatus=FAILED)
+    Backend -> DB : Créer FaceScan\n(status=FAILED,\nfailureReason="Low similarity")
+    Backend --> App : 200 OK\n{ verified: false,\nconfidence: 0.32 }
+    App --> User : Afficher : "Vérification échouée"\nProposer de réessayer
+  end
+
+else Aucun visage détecté
+  FaceAI --> Backend : { error: "No face detected" }
+  Backend -> DB : Créer FaceScan\n(status=FAILED,\nfailureReason="No face")
+  Backend --> App : 400 Bad Request\n{ error: "Visage non détecté" }
+  App --> User : "Aucun visage détecté.\nVeuillez réessayer."
+end
+
+@enduml

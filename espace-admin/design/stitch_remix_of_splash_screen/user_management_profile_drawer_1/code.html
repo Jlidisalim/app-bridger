@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Bridger | Admin User Management</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1e3b8a",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#121620",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.75rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        /* Custom scrollbar for drawer */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #e2e8f0;
+            border-radius: 10px;
+        }
+        .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #334155;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display overflow-hidden">
+<div class="relative flex h-screen w-full">
+<!-- Sidebar -->
+<aside class="w-64 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hidden lg:flex flex-col">
+<div class="p-6 flex items-center gap-3">
+<div class="bg-primary text-white p-2 rounded-lg">
+<span class="material-symbols-outlined block">diamond</span>
+</div>
+<h2 class="text-xl font-bold tracking-tight text-primary">Bridger</h2>
+</div>
+<nav class="flex-1 px-4 space-y-2 mt-4">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-medium text-sm">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg bg-primary/10 text-primary border border-primary/20" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">group</span>
+<span class="font-medium text-sm">User Management</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">handshake</span>
+<span class="font-medium text-sm">Deals</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">security</span>
+<span class="font-medium text-sm">Risk Analytics</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-medium text-sm">Settings</span>
+</a>
+</nav>
+<div class="p-4 border-t border-slate-200 dark:border-slate-800">
+<div class="flex items-center gap-3 p-2">
+<div class="size-10 rounded-full bg-slate-200 bg-cover bg-center" data-alt="Administrator profile photo" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCQelao1Y81GjGrzPq4SGy059mIZQKYNpRr1B_qNhQ1_eetgOSTToPAyVxBYI4lijauP3LJZTTwLgRJXNxI_Ue7RT_UCH7eIz9QOQlSbWfFTMiglTefZ3RCO1yB-jXD-wt9OgmJZsBOASjr0P4uIay7V6ASVrqP5l421uzSo720SiguMpeqhNQ-lX5Ll8-JJ2jLeHKEN1wFnEyStLF4mFClmgolWswupq5KiaQflss4WERBQsVB1S5MXLkx2UCSuViRDblIYyXt-Hs')"></div>
+<div class="flex flex-col overflow-hidden">
+<span class="text-sm font-semibold truncate">Alex Rivera</span>
+<span class="text-xs text-slate-500 truncate">Super Admin</span>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+<!-- Top Nav -->
+<header class="h-16 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between px-8 z-10 shrink-0">
+<div class="flex items-center flex-1 max-w-md">
+<div class="relative w-full">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">search</span>
+<input class="w-full bg-slate-100 dark:bg-slate-800 border-none rounded-lg pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-primary/20" placeholder="Search across users, emails, or deals..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-2 right-2 size-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900"></span>
+</button>
+<button class="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">
+<span class="material-symbols-outlined">help_outline</span>
+</button>
+</div>
+</header>
+<!-- Dashboard Content -->
+<div class="flex-1 overflow-y-auto p-8 space-y-8">
+<!-- Header Section -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div>
+<h1 class="text-2xl font-bold text-slate-900 dark:text-slate-100">User Management</h1>
+<p class="text-slate-500 text-sm">Monitor and manage access for your enterprise platform users.</p>
+</div>
+<button class="bg-primary text-white px-4 py-2.5 rounded-lg flex items-center gap-2 font-medium hover:bg-primary/90 transition-all shadow-sm shadow-primary/20">
+<span class="material-symbols-outlined text-[20px]">person_add</span>
+                        Add New User
+                    </button>
+</div>
+<!-- Stats Summary -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<div class="bg-white dark:bg-slate-900 p-6 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm">
+<div class="flex items-center justify-between mb-2">
+<span class="text-slate-500 text-sm font-medium uppercase tracking-wider">Total Users</span>
+<span class="material-symbols-outlined text-primary bg-primary/10 p-2 rounded-lg">group</span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="text-3xl font-bold">12,840</span>
+<span class="text-emerald-600 text-sm font-semibold flex items-center">
+<span class="material-symbols-outlined text-xs">trending_up</span> 12%
+                            </span>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 p-6 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm">
+<div class="flex items-center justify-between mb-2">
+<span class="text-slate-500 text-sm font-medium uppercase tracking-wider">Active Today</span>
+<span class="material-symbols-outlined text-emerald-600 bg-emerald-50 p-2 rounded-lg">pulse_alert</span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="text-3xl font-bold">1,204</span>
+<span class="text-emerald-600 text-sm font-semibold flex items-center">
+<span class="material-symbols-outlined text-xs">trending_up</span> 5%
+                            </span>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 p-6 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm">
+<div class="flex items-center justify-between mb-2">
+<span class="text-slate-500 text-sm font-medium uppercase tracking-wider">Flagged Accounts</span>
+<span class="material-symbols-outlined text-red-600 bg-red-50 p-2 rounded-lg">flag</span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="text-3xl font-bold">42</span>
+<span class="text-red-600 text-sm font-semibold flex items-center">
+<span class="material-symbols-outlined text-xs">trending_down</span> 2%
+                            </span>
+</div>
+</div>
+</div>
+<!-- Table & Filters Section -->
+<div class="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+<!-- Filters Bar -->
+<div class="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4 bg-slate-50/50 dark:bg-slate-900">
+<div class="flex flex-wrap items-center gap-3">
+<div class="relative">
+<select class="appearance-none bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg pl-3 pr-8 py-1.5 text-sm focus:ring-primary focus:border-primary">
+<option>Status: All</option>
+<option>Active</option>
+<option>Suspended</option>
+<option>Banned</option>
+</select>
+<span class="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-sm">expand_more</span>
+</div>
+<div class="relative">
+<select class="appearance-none bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg pl-3 pr-8 py-1.5 text-sm focus:ring-primary focus:border-primary">
+<option>KYC: All</option>
+<option>Verified</option>
+<option>Pending</option>
+<option>Unverified</option>
+</select>
+<span class="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-sm">expand_more</span>
+</div>
+<div class="relative">
+<select class="appearance-none bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg pl-3 pr-8 py-1.5 text-sm focus:ring-primary focus:border-primary">
+<option>Role: All</option>
+<option>Investor</option>
+<option>Borrower</option>
+<option>Partner</option>
+</select>
+<span class="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-sm">expand_more</span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<button class="p-1.5 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 rounded">
+<span class="material-symbols-outlined">filter_list</span>
+</button>
+<button class="p-1.5 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 rounded">
+<span class="material-symbols-outlined">download</span>
+</button>
+</div>
+</div>
+<!-- Table -->
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-slate-50 dark:bg-slate-800/50 text-slate-500 font-semibold text-xs uppercase tracking-wider">
+<th class="px-6 py-4">User Details</th>
+<th class="px-6 py-4">Total Deals</th>
+<th class="px-6 py-4">KYC Status</th>
+<th class="px-6 py-4">Risk Score (ML)</th>
+<th class="px-6 py-4">Rating</th>
+<th class="px-6 py-4 text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+<!-- User Row 1 -->
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors cursor-pointer" onclick="toggleDrawer()">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="size-10 rounded-full bg-slate-200 bg-cover bg-center border border-slate-200 dark:border-slate-700" data-alt="Sarah Jenkins profile photo" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAhHag2ns0htYJ4GWOcARmlqpE1EocsVkaGVqddFhJbqfIjoDhmeXeNALeWEm2oFAZVF8CIm0nsNGRISog8cfNgamwHxN7aWZewLL6eWOgkv_tSGqx7U3SSwkJUR8xOsyWNgf963y7CBUSz2zkr_xxFxsdsPlrbBYzzE9bdHr3JTz2XFgTtV2w-tq9JQiPnlDfkqU3WRAIizM87nAvJq8spO5viiN5gFRfKokRJHSs2B7c12bRsknNhFqyMnZGa8uul7gbCm0t8BhQ')"></div>
+<div class="flex flex-col">
+<span class="font-semibold text-sm">Sarah Jenkins</span>
+<span class="text-xs text-slate-500">sarah.j@enterprise.com</span>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 text-sm">24</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+<span class="size-1.5 rounded-full bg-emerald-500"></span> Verified
+                                        </span>
+</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">Low</span>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-1 text-amber-500">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="text-sm font-semibold text-slate-700 dark:text-slate-300">4.9</span>
+</div>
+</td>
+<td class="px-6 py-4 text-right">
+<div class="flex items-center justify-end gap-1">
+<button class="p-2 text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">chat</span>
+</button>
+<button class="p-2 text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- User Row 2 -->
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors cursor-pointer" onclick="toggleDrawer()">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="size-10 rounded-full bg-slate-200 bg-cover bg-center border border-slate-200 dark:border-slate-700" data-alt="Marcus Thorne profile photo" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuBOeR7wEz9MPRHmnB4AeF-tjtIZkPFrXhmhBdMpnjI4eql89z5k_O51w4eWFdO8S7y_U3GeFHFT3ADzPpRKtPAOjAuyv8nj3NJJjk5CNuTl1Qx7jZ4RwXBfwC2thUJGykjFlLj3ULkNNSA95bE7P_LZjP08eA3Pd0MYfe5tGb8e4TPnD2WHp0Omvq0G4MJi-mCQRf_Ven7uX_Gh-hIWyGGKs_ozV-GbTxAPZW8rovMcq_C_xuwUS5v2jhDIobXD6PrMnP-SlbeHWTM')"></div>
+<div class="flex flex-col">
+<span class="font-semibold text-sm">Marcus Thorne</span>
+<span class="text-xs text-slate-500">m.thorne@vanguard.io</span>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 text-sm">114</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+<span class="size-1.5 rounded-full bg-amber-500"></span> Pending
+                                        </span>
+</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">Medium</span>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-1 text-amber-500">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="text-sm font-semibold text-slate-700 dark:text-slate-300">4.2</span>
+</div>
+</td>
+<td class="px-6 py-4 text-right">
+<div class="flex items-center justify-end gap-1">
+<button class="p-2 text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">chat</span>
+</button>
+<button class="p-2 text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- User Row 3 -->
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors cursor-pointer" onclick="toggleDrawer()">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="size-10 rounded-full bg-slate-200 bg-cover bg-center border border-slate-200 dark:border-slate-700" data-alt="Elena Rodriguez profile photo" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAYXBoT0smaryUif_fJRUF5_Ur0UtBvSVlQPAC98O9o-uz_D2f7Zxp73-cNTMKw37nCPRNrSnK8MGtXNE40j7LPfcjsrckiBNj8Xob5H-zTSVkAGu59jsN6miYZ2SnkO8pgEQAJ69KQOWlU6_kMZb7XydDt3-8dabGP0aESdU-Hu5fy08ckRrr7bsYAwwBf_S8e6tbCUeHrUCMahmdmTaFgtOqIRanHp9YxH4miLmEUXPScxOFMG35BZFd86N_feihF0BXsG2zl1Vs')"></div>
+<div class="flex flex-col">
+<span class="font-semibold text-sm">Elena Rodriguez</span>
+<span class="text-xs text-slate-500">elena.rod@growth.com</span>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 text-sm">0</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+<span class="size-1.5 rounded-full bg-slate-400"></span> Unverified
+                                        </span>
+</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">High</span>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-1 text-slate-400">
+<span class="material-symbols-outlined text-[18px]">star</span>
+<span class="text-sm font-semibold">N/A</span>
+</div>
+</td>
+<td class="px-6 py-4 text-right">
+<div class="flex items-center justify-end gap-1">
+<button class="p-2 text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">chat</span>
+</button>
+<button class="p-2 text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination -->
+<div class="p-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+<p class="text-sm text-slate-500">Showing 1 to 3 of 12,840 results</p>
+<div class="flex items-center gap-2">
+<button class="px-3 py-1.5 text-sm font-medium border border-slate-200 dark:border-slate-700 rounded-lg disabled:opacity-50">Previous</button>
+<button class="px-3 py-1.5 text-sm font-medium border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800">1</button>
+<button class="px-3 py-1.5 text-sm font-medium border border-transparent rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">2</button>
+<button class="px-3 py-1.5 text-sm font-medium border border-transparent rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">3</button>
+<button class="px-3 py-1.5 text-sm font-medium border border-slate-200 dark:border-slate-700 rounded-lg">Next</button>
+</div>
+</div>
+</div>
+</div>
+<!-- User Profile Drawer Overlay -->
+<div class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 hidden transition-opacity duration-300 opacity-0" id="drawer-overlay" onclick="toggleDrawer()"></div>
+<!-- User Profile Drawer -->
+<div class="fixed right-0 top-0 h-full w-full max-w-md bg-white dark:bg-slate-900 z-50 transform translate-x-full transition-transform duration-300 ease-in-out border-l border-slate-200 dark:border-slate-800 flex flex-col shadow-2xl" id="user-drawer">
+<!-- Drawer Header -->
+<div class="p-6 border-b border-slate-100 dark:border-slate-800 flex items-start justify-between">
+<div class="flex items-center gap-4">
+<div class="size-16 rounded-2xl bg-slate-200 bg-cover bg-center border-2 border-white dark:border-slate-800 shadow-sm" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAhHag2ns0htYJ4GWOcARmlqpE1EocsVkaGVqddFhJbqfIjoDhmeXeNALeWEm2oFAZVF8CIm0nsNGRISog8cfNgamwHxN7aWZewLL6eWOgkv_tSGqx7U3SSwkJUR8xOsyWNgf963y7CBUSz2zkr_xxFxsdsPlrbBYzzE9bdHr3JTz2XFgTtV2w-tq9JQiPnlDfkqU3WRAIizM87nAvJq8spO5viiN5gFRfKokRJHSs2B7c12bRsknNhFqyMnZGa8uul7gbCm0t8BhQ')"></div>
+<div>
+<div class="flex items-center gap-2">
+<h3 class="text-xl font-bold">Sarah Jenkins</h3>
+<span class="material-symbols-outlined text-blue-500 text-[18px]" style="font-variation-settings: 'FILL' 1;">verified</span>
+</div>
+<p class="text-slate-500 text-sm font-medium">Verified Broker</p>
+</div>
+</div>
+<button class="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-400" onclick="toggleDrawer()">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<!-- Drawer Scroll Content -->
+<div class="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-8">
+<!-- Quick Stats -->
+<div class="grid grid-cols-3 gap-3">
+<div class="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800 text-center">
+<p class="text-[10px] text-slate-500 font-semibold uppercase tracking-wider mb-1">Completion</p>
+<p class="text-lg font-bold text-primary">98%</p>
+</div>
+<div class="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800 text-center">
+<p class="text-[10px] text-slate-500 font-semibold uppercase tracking-wider mb-1">Total Deals</p>
+<p class="text-lg font-bold text-primary">42</p>
+</div>
+<div class="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800 text-center">
+<p class="text-[10px] text-slate-500 font-semibold uppercase tracking-wider mb-1">Avg Rating</p>
+<p class="text-lg font-bold text-amber-500">4.9</p>
+</div>
+</div>
+<!-- Personal Info -->
+<section>
+<h4 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Personal Info</h4>
+<div class="space-y-3">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-slate-400 text-[20px]">mail</span>
+<span class="text-sm font-medium text-slate-700 dark:text-slate-300">sarah.j@enterprise.com</span>
+</div>
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-slate-400 text-[20px]">call</span>
+<span class="text-sm font-medium text-slate-700 dark:text-slate-300">+1 (555) 012-3456</span>
+</div>
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-slate-400 text-[20px]">location_on</span>
+<span class="text-sm font-medium text-slate-700 dark:text-slate-300">London, United Kingdom</span>
+</div>
+</div>
+</section>
+<!-- KYC Status -->
+<section>
+<h4 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">KYC Status</h4>
+<div class="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/30 p-4 rounded-xl flex items-center justify-between">
+<div>
+<p class="text-xs font-semibold text-emerald-800 dark:text-emerald-400">Verified on Oct 12, 2023</p>
+<button class="text-[11px] text-emerald-600 dark:text-emerald-500 font-bold hover:underline mt-1 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">description</span>
+                                    View Documents
+                                </button>
+</div>
+<span class="material-symbols-outlined text-emerald-500 text-[28px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+</section>
+<!-- Trust & Risk -->
+<section>
+<h4 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Trust &amp; Risk</h4>
+<div class="grid grid-cols-2 gap-4">
+<div class="space-y-1">
+<p class="text-xs text-slate-500">ML Risk Score</p>
+<div class="flex items-center gap-2">
+<span class="text-sm font-bold text-blue-600">Low</span>
+<div class="flex-1 h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+<div class="w-1/4 h-full bg-blue-500"></div>
+</div>
+</div>
+</div>
+<div class="space-y-1">
+<p class="text-xs text-slate-500">Cancellation Rate</p>
+<p class="text-sm font-bold text-slate-700 dark:text-slate-300">2%</p>
+</div>
+</div>
+</section>
+<!-- Activity History -->
+<section>
+<h4 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Recent Activity</h4>
+<div class="space-y-4">
+<div class="flex gap-3">
+<div class="flex flex-col items-center">
+<div class="size-2 rounded-full bg-primary mt-1.5"></div>
+<div class="w-px flex-1 bg-slate-200 dark:bg-slate-800 my-1"></div>
+</div>
+<div>
+<p class="text-sm font-semibold">LHR → JFK Completed</p>
+<p class="text-xs text-slate-500">2 hours ago • Deal #92841</p>
+</div>
+</div>
+<div class="flex gap-3">
+<div class="flex flex-col items-center">
+<div class="size-2 rounded-full bg-slate-300 dark:bg-slate-700 mt-1.5"></div>
+<div class="w-px flex-1 bg-slate-200 dark:bg-slate-800 my-1"></div>
+</div>
+<div>
+<p class="text-sm font-semibold">Funds Added: $25,000</p>
+<p class="text-xs text-slate-500">Yesterday • Transaction #TR992</p>
+</div>
+</div>
+<div class="flex gap-3">
+<div class="flex flex-col items-center">
+<div class="size-2 rounded-full bg-slate-300 dark:bg-slate-700 mt-1.5"></div>
+</div>
+<div>
+<p class="text-sm font-semibold">Profile Updated</p>
+<p class="text-xs text-slate-500">3 days ago</p>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- Admin Actions Footer -->
+<div class="p-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+<div class="flex flex-col gap-2">
+<div class="grid grid-cols-2 gap-2">
+<button class="flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold text-amber-600 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/30 rounded-lg hover:bg-amber-100 transition-colors">
+<span class="material-symbols-outlined text-[18px]">warning</span>
+                                Warn User
+                            </button>
+<button class="flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold text-red-600 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 rounded-lg hover:bg-red-100 transition-colors">
+<span class="material-symbols-outlined text-[18px]">block</span>
+                                Suspend
+                            </button>
+</div>
+<button class="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold text-white bg-primary rounded-lg hover:bg-primary/90 transition-all shadow-md shadow-primary/20">
+<span class="material-symbols-outlined text-[18px]">settings_backup_restore</span>
+                            Restore Account
+                        </button>
+</div>
+</div>
+</div>
+</main>
+</div>
+<script>
+        function toggleDrawer() {
+            const drawer = document.getElementById('user-drawer');
+            const overlay = document.getElementById('drawer-overlay');
+            
+            if (drawer.classList.contains('translate-x-full')) {
+                // Open
+                drawer.classList.remove('translate-x-full');
+                overlay.classList.remove('hidden');
+                setTimeout(() => {
+                    overlay.classList.add('opacity-100');
+                    overlay.classList.remove('opacity-0');
+                }, 10);
+            } else {
+                // Close
+                drawer.classList.add('translate-x-full');
+                overlay.classList.add('opacity-0');
+                overlay.classList.remove('opacity-100');
+                setTimeout(() => {
+                    overlay.classList.add('hidden');
+                }, 300);
+            }
+        }
+    </script>
+</body></html>

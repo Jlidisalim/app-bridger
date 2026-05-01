@@ -1,0 +1,96 @@
+@startuml
+title Diagramme de Séquence — Paiement Escrow et Libération\nà la Livraison Confirmée
+
+skinparam sequenceArrowThickness 2
+
+actor "Expéditeur" as Sender
+participant "App\nExpéditeur" as AppS
+participant "Backend API\n(Express.js)" as Backend
+participant "Stripe API" as Stripe
+database "Base de\nDonnées" as DB
+participant "App\nVoyageur" as AppT
+actor "Voyageur" as Traveler
+
+== Phase 1 : Création du paiement escrow (lors du matching) ==
+
+note over AppS, Backend
+  Le voyageur accepte le deal
+  → Le système demande le paiement à l'expéditeur
+end note
+
+AppS -> AppS : Stripe Sheet (UI native)\nSaisie carte bancaire
+AppS -> Backend : POST /api/wallet/escrow\n{ dealId, amount: 50.00 }
+
+Backend -> Stripe : stripe.paymentIntents.create({\n  amount: 5000,\n  currency: "usd",\n  capture_method: "manual",\n  metadata: { dealId }\n})
+
+note right of Stripe
+  capture_method = "manual"
+  Les fonds sont AUTORISÉS
+  mais PAS encore capturés.
+  L'argent est bloqué sur
+  la carte de l'expéditeur.
+end note
+
+Stripe --> Backend : { paymentIntentId:\n"pi_xxx",\nstatus: "requires_capture" }
+
+Backend -> DB : Créer Transaction\n(userId=senderId,\ndealId, type=PAYMENT,\namount=50.00,\nstatus=HELD,\nstripePaymentIntentId)
+
+Backend --> AppS : 200 OK\n{ message: "Paiement bloqué\nen séquestre" }
+AppS --> Sender : "Paiement de 50.00 USD\nbloqué en séquestre.\nLes fonds seront libérés\nlors de la livraison."
+
+== Phase 2 : Libération après livraison confirmée (QR code) ==
+
+note over AppT, Backend
+  Le voyageur scanne le QR code
+  de confirmation de livraison
+  (voir diagramme QR code)
+end note
+
+Backend -> Backend : Livraison confirmée\n(deal.status = DELIVERED)
+
+Backend -> Stripe : stripe.paymentIntents.capture(\n  "pi_xxx"\n)
+
+note right of Stripe
+  Les fonds sont maintenant
+  CAPTURÉS et transférés
+  sur le compte Stripe
+  de la plateforme.
+end note
+
+Stripe --> Backend : { status: "succeeded" }
+
+' Calcul de la commission
+Backend -> Backend : Calculer commission\nplateforme = 50.00 × 5%\n= 2.50 USD
+
+Backend -> DB : Mettre à jour Transaction\n(status = COMPLETED)
+
+Backend -> DB : Créer Transaction\n(type = COMMISSION,\namount = 2.50,\nstatus = COMPLETED)
+
+' Payout vers le wallet du voyageur
+Backend -> DB : Créer Transaction\n(userId=travelerId,\ntype = PAYOUT,\namount = 47.50,\nstatus = COMPLETED)
+
+Backend -> DB : Mettre à jour Wallet\ntraveler\n(balance += 47.50)
+
+Backend --> AppT : 200 OK\n{ payout: 47.50 USD }
+AppT --> Traveler : "Paiement de 47.50 USD\nreçu dans votre wallet !"
+
+Backend --> AppS : Notification\n"Livraison confirmée.\n50.00 USD débités."
+
+== Phase 3 : Retrait vers compte bancaire (optionnel) ==
+
+Traveler -> AppT : Ouvrir Wallet\n→ Cliquer "Retirer"
+AppT -> Backend : POST /api/wallet/withdraw\n{ amount: 47.50 }
+
+Backend -> DB : Vérifier solde wallet\n(balance >= 47.50)
+
+Backend -> Stripe : stripe.transfers.create({\n  amount: 4750,\n  currency: "usd",\n  destination:\n    "acct_xxx" (Stripe Connect)\n})
+
+Stripe --> Backend : { transferId }
+
+Backend -> DB : Créer Transaction\n(type = WITHDRAWAL,\namount = 47.50)
+Backend -> DB : Mettre à jour Wallet\n(balance -= 47.50)
+
+Backend --> AppT : 200 OK\n{ message: "Retrait effectué" }
+AppT --> Traveler : "47.50 USD transférés\nvers votre compte bancaire"
+
+@enduml

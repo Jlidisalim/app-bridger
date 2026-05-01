@@ -1,0 +1,81 @@
+@startuml
+title Diagramme d'Activité — Flux Complet de l'Expéditeur\n(Création d'annonce → Publication)
+
+start
+
+:Cliquer sur "Créer" (onglet central);
+
+:Sélectionner le rôle :\n**Expéditeur**;
+
+' === Étape 1 : Détails du colis ===
+:Saisir le titre du colis;
+:Saisir la description;
+:Choisir la taille du colis\n(SMALL / MEDIUM / LARGE / EXTRA_LARGE);
+:Indiquer le poids (en kg);
+
+if (Ajouter des photos ?) then (oui)
+  :Sélectionner des photos\n(expo-image-picker);
+  :Upload vers Cloudinary;
+else (non)
+endif
+
+if (Données valides ?) then (oui)
+  :Passer à l'étape suivante;
+else (non)
+  :Afficher les erreurs\nde validation;
+  backward:Corriger les champs;
+endif
+
+' === Étape 2 : Route ===
+:Sélectionner la ville\net le pays de départ;
+:Sélectionner la ville\net le pays d'arrivée;
+:Choisir la date de collecte;
+:Choisir la date de livraison\nsouhaitée;
+
+if (Route valide ?) then (oui)
+  :Passer à l'étape suivante;
+else (non)
+  backward:Corriger la route;
+endif
+
+' === Étape 3 : Destinataire ===
+:Saisir le nom du destinataire;
+:Saisir le numéro\nde téléphone du destinataire;
+:Saisir l'adresse de livraison;
+
+' === Étape 4 : Tarification ===
+:Calculer la suggestion\nde prix automatique;
+
+note right
+  Algorithme :
+  base_price(route)
+  × weight_factor
+  × category_multiplier
+  + commission 5%
+end note
+
+:Afficher la fourchette\nde prix suggérée;
+
+:L'expéditeur fixe\nson prix final;
+
+:Afficher le récapitulatif :\n- Prix expéditeur : XX USD\n- Commission (5%) : X.XX USD\n- Total : XX.XX USD;
+
+' === Étape 5 : Révision et publication ===
+:Afficher le récapitulatif\ncomplet de l'annonce;
+
+:Vérifier toutes les\ninformations;
+
+if (Confirmer la publication ?) then (oui)
+  :Envoyer POST /api/deals;
+  :Générer le QR code\n(dealId + HMAC);
+  :Créer le Deal\n(status = OPEN);
+  :Créer TrackingEvent\n(OPEN);
+  #palegreen:Afficher "Annonce\npubliée avec succès !";
+else (non)
+  :Retourner en arrière\npour modifier;
+  backward:Modifier les informations;
+endif
+
+stop
+
+@enduml

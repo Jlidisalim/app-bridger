@@ -1,0 +1,143 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ─── Backend ──────────────────────────────────────────────────────────────
+  backend:
+    name: Backend (Node.js)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: bridger
+          POSTGRES_PASSWORD: bridger_dev
+          POSTGRES_DB: bridger_db
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://bridger:bridger_dev@localhost:5432/bridger_db
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ci-jwt-secret-at-least-32-characters-long
+      JWT_REFRESH_SECRET: ci-refresh-secret-at-least-32-characters
+      STRIPE_SECRET_KEY: sk_test_ci_dummy_key_bridger
+      STRIPE_WEBHOOK_SECRET: whsec_ci_dummy
+      STRIPE_PUBLISHABLE_KEY: pk_test_ci_dummy
+      CLOUDINARY_URL: cloudinary://key:secret@ci_cloud
+      GOOGLE_MAPS_API_KEY: ci_maps_key
+      BAILEYS_URL: http://localhost:3001
+      BAILEYS_API_KEY: ci-baileys-api-key-at-least-16-chars
+      QR_SECRET: ci-qr-secret-at-least-32-characters-long
+      ML_SERVICE_URL: http://localhost:8000
+      FACE_SERVICE_URL: http://localhost:8000
+      NODE_ENV: test
+      PORT: 4000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Run Prisma migrations
+        working-directory: backend
+        run: npx prisma migrate deploy
+
+      - name: TypeScript type check
+        working-directory: backend
+        run: npx tsc --noEmit
+
+      - name: Run tests (if exist)
+        working-directory: backend
+        run: npm test --if-present
+
+  # ─── Frontend ─────────────────────────────────────────────────────────────
+  frontend:
+    name: Frontend (React Native)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript type check
+        run: npx tsc --noEmit
+
+  # ─── Python ML Service ────────────────────────────────────────────────────
+  python-service:
+    name: Python ML Service
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: face-verification-service/requirements.txt
+
+      - name: Install dependencies (excluding heavy ML packages for CI speed)
+        working-directory: face-verification-service
+        run: |
+          pip install fastapi uvicorn pydantic python-multipart numpy scipy pillow opencv-python-headless
+
+      - name: Python syntax check
+        working-directory: face-verification-service
+        run: python -m py_compile app/main.py app/config.py app/schemas.py app/liveness.py
+
+  # ─── Baileys Server ───────────────────────────────────────────────────────
+  baileys:
+    name: Baileys Server (Node.js)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: baileys-server/package-lock.json
+
+      - name: Install dependencies
+        working-directory: baileys-server
+        run: npm install
+
+      - name: Syntax check
+        working-directory: baileys-server
+        run: node --check server.js

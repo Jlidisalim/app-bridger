@@ -1,0 +1,90 @@
+version: '3.9'
+
+services:
+  # ─── Databases ───────────────────────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: bridger
+      POSTGRES_PASSWORD: bridger_dev
+      POSTGRES_DB: bridger_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "bridger"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ─── Backend API ─────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file: ./backend/.env
+    environment:
+      DATABASE_URL: postgresql://bridger:bridger_dev@postgres:5432/bridger_db
+      REDIS_URL: redis://redis:6379
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - /app/dist
+    command: npm run dev
+
+  # ─── WhatsApp OTP (Baileys) ───────────────────────────────────────
+  baileys:
+    build:
+      context: ./baileys-server
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file: ./baileys-server/.env
+    environment:
+      REDIS_URL: redis://redis:6379
+      PORT: 3001
+    volumes:
+      - baileys_session:/app/auth_info
+
+  # ─── Face Verification / ML Service ──────────────────────────────
+  ml-service:
+    build:
+      context: ./face-verification-service
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ml_models:/root/.insightface/models
+    deploy:
+      resources:
+        limits:
+          memory: 4g
+
+volumes:
+  postgres_data:
+  redis_data:
+  baileys_session:
+  ml_models:

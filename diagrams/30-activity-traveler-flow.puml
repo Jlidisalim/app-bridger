@@ -1,0 +1,66 @@
+@startuml
+title Diagramme d'Activité — Flux Complet du Voyageur\n(Création de trajet → Publication)
+
+start
+
+:Cliquer sur "Créer" (onglet central);
+
+:Sélectionner le rôle :\n**Voyageur**;
+
+' === Étape 1 : Route du trajet ===
+:Sélectionner la ville\net le pays de départ;
+:Sélectionner la ville\net le pays d'arrivée;
+:Choisir la date de départ;
+:Choisir la date d'arrivée;
+
+if (Dates cohérentes ?) then (oui)
+  :Passer à l'étape suivante;
+else (non)
+  :Afficher erreur :\n"La date d'arrivée doit être\naprès la date de départ";
+  backward:Corriger les dates;
+endif
+
+' === Étape 2 : Détails du vol (optionnel) ===
+if (Voyage en avion ?) then (oui)
+  :Saisir le numéro de vol;
+  :Saisir la compagnie aérienne;
+else (non — train, voiture, bus)
+  :Passer cette étape;
+endif
+
+' === Étape 3 : Capacité disponible ===
+:Indiquer le poids\ndisponible (en kg);
+:Choisir la taille maximale\nacceptée (S/M/L/XL);
+
+if (Capacité > 0 ?) then (oui)
+  :Passer à l'étape suivante;
+else (non)
+  :Afficher erreur;
+  backward:Corriger la capacité;
+endif
+
+' === Étape 4 : Tarification ===
+:Définir le prix\npar kilogramme;
+:Afficher la commission\nplateforme (5%);
+:Afficher le gain net\nestimé par kg;
+
+' === Étape 5 : Révision et publication ===
+:Afficher le récapitulatif\ncomplet du trajet :
+- Route : Ville A → Ville B
+- Dates : XX/XX → XX/XX
+- Vol : XX-XXX (optionnel)
+- Capacité : XX kg
+- Prix : XX USD/kg;
+
+if (Confirmer la publication ?) then (oui)
+  :Envoyer POST /api/trips;
+  :Créer le Trip\n(status = ACTIVE);
+  #palegreen:Afficher "Trajet\npublié avec succès !";
+  :Le trajet est maintenant\nvisible par les expéditeurs\ndans l'écran Explore;
+else (non)
+  backward:Modifier les informations;
+endif
+
+stop
+
+@enduml

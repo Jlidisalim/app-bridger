@@ -1,0 +1,53 @@
+@startuml
+title Raffinement — Cas d'Utilisation « Gérer les Deals Reçus »
+
+left to right direction
+skinparam actorStyle awesome
+
+actor "Voyageur" as Traveler
+
+rectangle "Gestion des deals par le voyageur" {
+  usecase "Consulter la liste\ndes deals disponibles" as UC1
+  usecase "Filtrer les deals\npar route" as UC2
+  usecase "Voir les détails\nd'un deal" as UC3
+  usecase "Voir le profil\nde l'expéditeur" as UC4
+  usecase "Accepter le deal" as UC5
+  usecase "Refuser le deal" as UC6
+  usecase "Ouvrir le chat\navec l'expéditeur" as UC7
+  usecase "Scanner QR code\nprise en charge" as UC8
+  usecase "Mettre à jour statut :\nIN_TRANSIT" as UC9
+  usecase "Scanner QR code\nlivraison" as UC10
+  usecase "Recevoir le paiement\n(wallet)" as UC11
+  usecase "Évaluer l'expéditeur" as UC12
+}
+
+Traveler --> UC1
+Traveler --> UC3
+Traveler --> UC5
+Traveler --> UC6
+Traveler --> UC8
+Traveler --> UC9
+Traveler --> UC10
+Traveler --> UC12
+
+UC1 ..> UC2 : <<extend>>
+UC3 ..> UC4 : <<include>>
+UC5 ..> UC7 : <<include>>
+UC10 ..> UC11 : <<include>>
+
+note right of UC5
+  Lors de l'acceptation :
+  - Deal status → MATCHED
+  - ChatRoom créée automatiquement
+  - Paiement escrow initié
+end note
+
+note right of UC10
+  Lors de la livraison :
+  - Vérification HMAC du QR
+  - Escrow libéré via Stripe
+  - Commission 5% prélevée
+  - Payout dans wallet voyageur
+end note
+
+@enduml

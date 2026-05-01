@@ -1,0 +1,105 @@
+@startuml
+title Diagramme d'Activité — Cycle de Vie Complet d'un Deal
+
+|Expéditeur|
+start
+:Créer une annonce de colis\n(détails, route, photos, prix);
+:Publier l'annonce;
+:Deal status = **OPEN**;
+
+|Voyageur|
+:Parcourir les annonces\ndisponibles sur sa route;
+:Consulter les détails\ndu colis + profil expéditeur;
+
+if (Accepter le deal ?) then (oui)
+  :Accepter le deal;
+else (non)
+  :Ignorer ou refuser;
+  stop
+endif
+
+|Système|
+:Deal status = **MATCHED**;
+:Créer la ChatRoom;
+:Initier le paiement\nescrow (Stripe);
+
+|Expéditeur|
+:Payer le montant en séquestre\n(via Stripe Sheet);
+
+|Système|
+:Fonds bloqués\n(PaymentIntent manual capture);
+
+|Voyageur|
+:Rencontrer l'expéditeur\nau point de collecte;
+:Scanner le QR code\nde l'expéditeur;
+
+|Système|
+:Vérifier la signature\nHMAC du QR code;
+
+if (QR valide ?) then (oui)
+  :Deal status = **PICKED_UP**;
+  :Créer TrackingEvent;
+  :Notifier l'expéditeur;
+else (non)
+  :Afficher erreur :\n"QR invalide";
+  |Voyageur|
+  backward:Réessayer le scan;
+  detach
+endif
+
+|Voyageur|
+:Transporter le colis;
+:Mettre à jour le statut;
+
+|Système|
+:Deal status = **IN_TRANSIT**;
+:Créer TrackingEvent\n(location, note);
+:Notifier l'expéditeur;
+
+|Voyageur|
+:Arriver à destination;
+:Scanner le QR code\nde confirmation livraison;
+
+|Système|
+:Vérifier HMAC du QR code;
+:Deal status = **DELIVERED**;
+
+:Capturer le PaymentIntent\nStripe (libérer l'escrow);
+:Calculer commission\nplateforme (5%);
+:Transférer le payout\ndans le wallet du voyageur;
+:Deal status = **COMPLETED**;
+
+:Créer TrackingEvent (COMPLETED);
+
+fork
+  |Expéditeur|
+  :Recevoir notification\n"Colis livré avec succès";
+
+  if (Problème ?) then (oui)
+    :Ouvrir un litige;
+    |Système|
+    :Deal status = **DISPUTED**;
+    |Administrateur|
+    :Arbitrer le litige;
+    if (Remboursement ?) then (oui)
+      |Système|
+      :Effectuer le remboursement\nvia Stripe;
+    else (non)
+      :Fermer le litige\nsans remboursement;
+    endif
+  else (non)
+    :Évaluer le voyageur\n(1 à 5 étoiles);
+  endif
+fork again
+  |Voyageur|
+  :Recevoir notification\n"Paiement reçu : XX USD";
+  :Évaluer l'expéditeur\n(1 à 5 étoiles);
+end fork
+
+|Système|
+:Mettre à jour les\nratings des 2 utilisateurs;
+:Mettre à jour les\nTrustScores;
+
+stop
+
+@enduml

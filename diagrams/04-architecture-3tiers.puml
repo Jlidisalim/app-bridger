@@ -1,0 +1,55 @@
+@startuml
+title Architecture 3-Tiers — Bridger
+
+skinparam rectangle {
+  BackgroundColor<<presentation>> #E3F2FD
+  BackgroundColor<<metier>> #FFF3E0
+  BackgroundColor<<data>> #E8F5E9
+  BorderColor #333333
+  RoundCorner 15
+}
+
+rectangle "Couche Présentation\n(Client Mobile)" <<presentation>> {
+  component "React Native\n(Expo SDK 54)" as Frontend
+  component "React Navigation 7\n(AuthStack + AppStack + Tabs)" as Nav
+  component "Zustand\n(Gestion d'état)" as State
+  component "Socket.io Client\n(Chat temps réel)" as RealTime
+  component "Stripe React Native\n(Paiement mobile)" as PayUI
+}
+
+rectangle "Couche Métier\n(Serveur d'application)" <<metier>> {
+  component "Express.js + TypeScript\n(API REST - port 3002)" as API
+  component "JWT Middleware\n(Authentification)" as Auth
+  component "Routes API\n(auth, deals, trips, wallet,\nchat, disputes, reviews,\nverification, search, notifications)" as Routes
+  component "Services Métier\n(paymentService, otpService,\nfaceVerificationService,\nuploadService, websocket)" as Services
+  component "Baileys Server\n(WhatsApp OTP - port 3000)" as Baileys
+  component "FastAPI + InsightFace\n(Face IA - port 8001)" as FaceAI
+}
+
+rectangle "Couche Accès aux Données\n(Persistance)" <<data>> {
+  database "PostgreSQL\n(+ pgvector)" as DB
+  database "SQLite\n(développement)" as SQLite
+  component "Prisma ORM 5\n(Migrations + Queries)" as ORM
+  cloud "Cloudinary\n(Images)" as Cloud
+  cloud "Stripe API\n(Transactions)" as StripeBE
+}
+
+Frontend -down-> API : "HTTP REST\n+ WebSocket"
+Nav --> Frontend
+State --> Frontend
+RealTime --> Frontend
+PayUI --> Frontend
+
+API -down-> Auth
+Auth -down-> Routes
+Routes -down-> Services
+Services --> Baileys
+Services --> FaceAI
+
+Services -down-> ORM
+ORM -down-> DB : "Production"
+ORM -down-> SQLite : "Développement"
+Services -down-> Cloud : "Upload"
+Services -down-> StripeBE : "Paiement"
+
+@enduml

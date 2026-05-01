@@ -1,0 +1,62 @@
+@startuml
+title Raffinement — Cas d'Utilisation « Paiement Escrow et Wallet »
+
+left to right direction
+skinparam actorStyle awesome
+
+actor "Expéditeur" as Sender
+actor "Voyageur" as Traveler
+actor "Stripe" as Stripe
+
+rectangle "Paiement Escrow et Portefeuille" {
+
+  package "Paiement Escrow" {
+    usecase "Initier le paiement\nescrow lors du matching" as UC_Escrow
+    usecase "Bloquer les fonds\n(PaymentIntent manual)" as UC_Block
+    usecase "Libérer les fonds\naprès livraison" as UC_Release
+    usecase "Prélever la commission\nplateforme (5%)" as UC_Commission
+    usecase "Rembourser en cas\nde litige résolu" as UC_Refund
+  }
+
+  package "Wallet" {
+    usecase "Consulter le\nsolde du wallet" as UC_Balance
+    usecase "Voir l'historique\ndes transactions" as UC_History
+    usecase "Effectuer un dépôt\nvia Stripe" as UC_Deposit
+    usecase "Effectuer un retrait\nvers compte bancaire" as UC_Withdraw
+    usecase "Recevoir le payout\naprès livraison" as UC_Payout
+  }
+}
+
+Sender --> UC_Escrow
+Sender --> UC_Balance
+Sender --> UC_History
+Sender --> UC_Deposit
+
+Traveler --> UC_Balance
+Traveler --> UC_History
+Traveler --> UC_Withdraw
+Traveler --> UC_Payout
+
+UC_Escrow ..> UC_Block : <<include>>
+UC_Escrow --> Stripe
+UC_Release --> Stripe
+UC_Release ..> UC_Commission : <<include>>
+UC_Release ..> UC_Payout : <<include>>
+UC_Refund --> Stripe
+UC_Deposit --> Stripe
+UC_Withdraw --> Stripe
+
+note right of UC_Block
+  Stripe PaymentIntent
+  capture_method = "manual"
+  Fonds bloqués jusqu'à
+  confirmation de livraison
+end note
+
+note bottom of UC_Commission
+  Commission = 5% du prix du deal
+  Déduite automatiquement lors
+  du payout au voyageur
+end note
+
+@enduml

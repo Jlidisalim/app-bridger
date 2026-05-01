@@ -1,0 +1,80 @@
+@startuml
+title Architecture de Déploiement — Bridger (Microservices)
+
+skinparam node {
+  BackgroundColor #E8F0FE
+  BorderColor #1E3B8A
+}
+skinparam database {
+  BackgroundColor #FFF3E0
+  BorderColor #E65100
+}
+skinparam cloud {
+  BackgroundColor #F3E5F5
+  BorderColor #7B1FA2
+}
+
+node "Téléphone Mobile\n(iOS / Android)" as Phone {
+  component "[React Native\nExpo SDK 54]" as RN
+  component "[Zustand Store]" as Zustand
+  component "[Socket.io Client]" as SockClient
+  component "[Stripe SDK]" as StripeMobile
+  component "[Expo Camera\n+ Image Picker]" as Camera
+}
+
+node "Serveur Backend API\nport: 3002" as BackendServer {
+  component "[Express.js\n+ TypeScript]" as Express
+  component "[Prisma ORM 5]" as Prisma
+  component "[Socket.io Server]" as SockServer
+  component "[JWT Auth\nMiddleware]" as JWT
+  component "[Helmet + CORS\n+ Rate Limit]" as Security
+}
+
+node "Serveur WhatsApp OTP\nport: 3000" as BaileysServer {
+  component "[Node.js\n+ Baileys]" as Baileys
+}
+
+node "Service Vérification\nFaciale IA\nport: 8001" as FaceServer {
+  component "[Python FastAPI]" as FastAPI
+  component "[InsightFace\nRetinaFace + ArcFace]" as InsightFace
+  component "[Docker Container]" as Docker
+}
+
+database "PostgreSQL\n(Production)" as PostgreSQL {
+  component "[pgvector\n(embeddings)]" as PGVector
+}
+
+database "SQLite\n(Développement)" as SQLite
+
+cloud "Cloudinary" as Cloudinary {
+  component "[Stockage images\ncolis, avatars,\ndocuments KYC]" as CloudMedia
+}
+
+cloud "Stripe" as Stripe {
+  component "[Paiement Escrow\n+ Stripe Connect\n(Payouts)]" as StripeAPI
+}
+
+cloud "Expo Push\nNotification Service" as ExpoPush
+
+' === Connections ===
+RN -down-> Express : "API REST\n(HTTPS / JSON)"
+SockClient <-down-> SockServer : "WebSocket\n(Socket.io)"
+StripeMobile -down-> StripeAPI : "Paiement"
+
+Express -down-> Prisma
+Prisma -down-> PostgreSQL : "Production"
+Prisma -down-> SQLite : "Développement"
+
+Express -right-> Baileys : "HTTP POST\n(envoi OTP)"
+Express -left-> FastAPI : "HTTP POST\n(vérification faciale)"
+
+Express -down-> CloudMedia : "Upload images"
+Express -down-> StripeAPI : "Escrow +\nPayouts"
+Express -down-> ExpoPush : "Notifications Push"
+
+FastAPI -down-> InsightFace : "Détection +\nReconnaissance"
+FastAPI --> Docker : "Conteneurisé"
+
+Camera --> RN : "Photos +\nSelfie"
+
+@enduml
