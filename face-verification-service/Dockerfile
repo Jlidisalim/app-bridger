@@ -20,7 +20,8 @@ COPY . .
 RUN python -c "from insightface.app import FaceAnalysis; FaceAnalysis(name='buffalo_l').prepare(ctx_id=-1, det_size=(640,640))"
 
 # Pre-download EasyOCR models for English, French, Arabic
-RUN python -c "import easyocr; easyocr.Reader(['en', 'fr', 'ar'])"
+RUN python -c "import easyocr; easyocr.Reader(['en', 'ar'])"
+RUN python -c "import easyocr; easyocr.Reader(['en', 'fr'])"
 
 # Pre-download multilingual sentiment model (~480 MB)
 RUN python -c "\
