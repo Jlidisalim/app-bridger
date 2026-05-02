@@ -64,6 +64,8 @@ jobs:
           ls -la node_modules/prisma 2>/dev/null | head -5 || echo "no node_modules/prisma"
           ls -la node_modules/@prisma 2>/dev/null | head -5 || echo "no node_modules/@prisma"
           cat package.json 2>/dev/null | head -20 || echo "no package.json"
+      - name: Install deps for migration
+        run: npm ci --omit=dev
       - name: Run Prisma migrations
         run: npx prisma migrate deploy
         env:
