@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import {
   View,
   Modal,
-  FlatList,
+  ScrollView,
   TouchableOpacity,
   TextInput,
   StyleSheet,
@@ -98,13 +98,13 @@ export const AirportAutocomplete: React.FC<AirportAutocompleteProps> = ({
       {/* Dropdown suggestions */}
       {focus && filtered.length > 0 && (
         <View style={styles.dropdown}>
-          <FlatList
-            data={filtered}
-            keyExtractor={(item) => item.iata}
+          <ScrollView
             keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled
             scrollEnabled={filtered.length > 5}
-            renderItem={({ item }) => (
-              <TouchableOpacity style={styles.item} onPress={() => handleSelect(item)}>
+          >
+            {filtered.map((item) => (
+              <TouchableOpacity key={item.iata} style={styles.item} onPress={() => handleSelect(item)}>
                 <View style={styles.itemLeft}>
                   <Typography size="lg" weight="bold" style={styles.iata}>
                     {item.iata}
@@ -119,8 +119,8 @@ export const AirportAutocomplete: React.FC<AirportAutocompleteProps> = ({
                   </View>
                 </View>
               </TouchableOpacity>
-            )}
-          />
+            ))}
+          </ScrollView>
         </View>
       )}
     </View>
