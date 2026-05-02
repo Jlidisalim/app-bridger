@@ -261,7 +261,7 @@ app.post('/deals/receiver-verify', async (req, res, next) => {
 });
 
 app.use('/deals',         authenticate, dealRoutes);
-app.use('/wallet',        authenticate, walletRoutes);
+app.use('/wallet',        walletRoutes);
 app.use('/chat',          authenticate, chatRoutes);
 app.use('/notifications', authenticate, notificationRoutes);
 app.use('/trips',         authenticate, tripRoutes);
