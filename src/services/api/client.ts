@@ -24,7 +24,7 @@ const configApiUrl = Constants.expoConfig?.extra?.apiUrl as string | undefined;
 const API_BASE_URL: string =
   (configApiUrl && configApiUrl.startsWith('http') ? configApiUrl : undefined) ||
   process.env.EXPO_PUBLIC_API_URL ||
-  (__DEV__ ? LOCAL_API_URL : 'https://api.bridger.app');
+  (__DEV__ ? LOCAL_API_URL : 'https://bridger-api.azurewebsites.net');
 
 if (__DEV__) {
   console.log('[API] Base URL:', API_BASE_URL);

@@ -2,7 +2,7 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 
 interface Props {
-  mode: 'gps' | 'flight' | null;
+  mode: 'gps' | 'flight' | 'walking' | 'car' | null;
   nonce: number;
   onDone: () => void;
 }

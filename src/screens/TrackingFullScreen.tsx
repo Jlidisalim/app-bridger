@@ -344,7 +344,7 @@ export const TrackingFullScreen: React.FC<Props> = ({ deal, currentUserId, onBac
               </View>
             )}
 
-            {!isTraveler && state.mode !== 'idle' && (
+            {!isTraveler && (
               <View style={styles.senderBadge}>
                 {isFlight ? (
                   <Plane size={16} color={COLORS.info} />

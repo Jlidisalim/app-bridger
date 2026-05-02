@@ -391,7 +391,7 @@ const TrackingWrapper = ({ navigation, route }: any) => {
   const dealId = route.params.dealId;
   const deals = useAppStore((s) => s.deals);
   const currentUser = useAppStore((s) => s.currentUser);
-  const deal = deals.find((d) => d.id === dealId) || { id: dealId, name: 'Unknown', routeString: 'N/A' };
+  const deal: any = deals.find((d) => d.id === dealId) || { id: dealId, name: 'Unknown', routeString: 'N/A' };
 
   const isSender = currentUser?.id === deal?.senderId;
 

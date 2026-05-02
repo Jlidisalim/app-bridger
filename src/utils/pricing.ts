@@ -1,8 +1,10 @@
 /**
  * Pricing Utilities for Bridger
- * 
+ *
  * AI-powered pricing suggestions and commission calculations.
  */
+
+import { calculateFees } from './feeEngine';
 
 // Popular route base prices (mock data - would come from ML model)
 const ROUTE_BASE_PRICES: Record<string, number> = {

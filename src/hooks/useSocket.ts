@@ -20,7 +20,7 @@ const LOCAL_WS_URL = Platform.select({
 const WS_BASE_URL: string =
   process.env.EXPO_PUBLIC_API_URL
   ?? (Constants.expoConfig?.extra?.apiUrl as string | undefined)?.replace('/v1', '')
-  ?? (__DEV__ ? LOCAL_WS_URL : 'https://api.bridger.app');
+  ?? (__DEV__ ? LOCAL_WS_URL : 'https://bridger-api.azurewebsites.net');
 
 // ── Singleton socket ──────────────────────────────────────────────────────────
 // Created once when the first hook mounts; stays alive until explicit logout.

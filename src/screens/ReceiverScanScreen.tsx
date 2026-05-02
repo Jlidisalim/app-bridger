@@ -21,6 +21,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
+import Constants from 'expo-constants';
 import { COLORS, SPACING, RADIUS } from '../theme/theme';
 import { Typography } from '../components/Typography';
 import { Button } from '../components/Button';
@@ -81,7 +82,10 @@ export const ReceiverScanScreen: React.FC<ReceiverScanScreenProps> = ({ onBack, 
     try {
       const e164 = parsed.format('E.164');
       // Try to fetch WhatsApp profile from baileys server
-      const baileysUrl = process.env.EXPO_PUBLIC_BAILEYS_URL || 'http://localhost:3001';
+      const baileysUrl =
+        process.env.EXPO_PUBLIC_BAILEYS_URL ||
+        (Constants.expoConfig?.extra?.baileysServerUrl as string | undefined) ||
+        'https://bridger-api.azurewebsites.net';
       const response = await fetch(`${baileysUrl}/api/check-whatsapp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -120,7 +124,7 @@ export const ReceiverScanScreen: React.FC<ReceiverScanScreenProps> = ({ onBack, 
     // Verify code exists in the system before proceeding
     setIsVerifying(true);
     try {
-      const verifyResponse = await apiClient.post(
+      const verifyResponse = await apiClient.post<{ valid: boolean; error?: string; dealId?: string; status?: string }>(
         '/deals/verify-sender-id',
         { senderId: senderId.trim() },
         false,

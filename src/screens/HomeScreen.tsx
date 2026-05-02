@@ -533,7 +533,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                                         </View>
                                         <View style={styles.statsRow}>
                                             <Typography size="xs" color={COLORS.background.slate[400]} style={{ marginLeft: 0 }}>
-                                                {activeTab === 'shipments' ? 'Sender' : 'Traveler'}
+                                                {postType === 'shipment' ? 'Sender' : 'Traveler'}
                                             </Typography>
                                         </View>
                                     </View>

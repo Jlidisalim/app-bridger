@@ -23,7 +23,7 @@ const LOCAL_BAILEYS_URL = Platform.select({
 const BAILEYS_SERVER_URL: string =
   process.env.EXPO_PUBLIC_BAILEYS_URL
   ?? (Constants.expoConfig?.extra?.baileysServerUrl as string | undefined)
-  ?? (__DEV__ ? LOCAL_BAILEYS_URL : 'https://api.bridger.app');
+  ?? (__DEV__ ? LOCAL_BAILEYS_URL : 'https://bridger-api.azurewebsites.net');
 
 // OTP storage for mock mode
 const otpStorage: Map<string, { code: string; expiresAt: number; attempts: number }> = new Map();

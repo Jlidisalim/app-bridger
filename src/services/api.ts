@@ -23,6 +23,7 @@ export {
   disputesApi,
   notificationsApi,
   searchApi,
+  reviewsApi,
 } from './api/index';
 
 // Tracks whether the last sendOTP call used local mode (backend unreachable)

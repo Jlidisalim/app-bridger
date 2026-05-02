@@ -87,8 +87,8 @@ export const FAKE_DEALS: Deal[] = [
   {
     id: 'deal-test-salim',
     senderId: 'user-salm',
-    sender: { id: 'user-salm', name: 'Salim', phone: '+21696422799', rating: 4.8 },
-    traveler: { id: 'user-amal', name: 'Amal', phone: '+21696422799', rating: 4.9 },
+    sender: { id: 'user-salm', name: 'Salim', rating: 4.8 },
+    traveler: { id: 'user-amal', name: 'Amal', rating: 4.9 },
     route: { from: 'TUN', to: 'CDG', departureDate: '2026-04-20' },
     pricing: { amount: 40, negotiable: false, currency: 'USD' },
     price: 40,
@@ -103,7 +103,6 @@ export const FAKE_DEALS: Deal[] = [
     toCountry: 'FR',
     weight: 0.2,
     currency: 'USD',
-    senderReceiver: { name: 'Salim', phone: '+21696422799' },
   },
   {
     id: 'deal-004',

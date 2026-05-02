@@ -34,5 +34,6 @@ module.exports = {
     ...appJson.expo.extra,
     apiUrl,
     baileysServerUrl: baileysUrl,
+    stripePublishableKey: process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY,
   },
 };

@@ -339,7 +339,7 @@ const styles = StyleSheet.create({
     },
     infoBox: {
         backgroundColor: COLORS.white,
-        borderRadius: RADIUS.md,
+        borderRadius: RADIUS.lg,
         padding: 14,
     },
     footer: {

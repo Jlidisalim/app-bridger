@@ -20,7 +20,7 @@ const LOCAL_API_URL = Platform.select({
 const API_BASE: string =
   process.env.EXPO_PUBLIC_API_URL
   ?? (Constants.expoConfig?.extra?.apiUrl as string | undefined)
-  ?? (__DEV__ ? LOCAL_API_URL : 'https://api.bridger.app');
+  ?? (__DEV__ ? LOCAL_API_URL : 'https://bridger-api.azurewebsites.net');
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const header = await authTokens.getAuthHeader();

@@ -94,11 +94,15 @@ router.get('/transactions', authenticate, async (req: any, res, next) => {
 router.post('/deposit', authenticate, validate(depositSchema), async (req: any, res, next) => {
   try {
     const { amount, currency = 'USD' } = req.validated || req.body;
-    // Dev bypass is ONLY active in development. In production the Stripe key must be present and live.
     const isProduction = process.env.NODE_ENV === 'production';
     const stripeKey = process.env.STRIPE_SECRET_KEY ?? '';
-    if (isProduction && !stripeKey.startsWith('sk_live_')) {
-      throw new Error('Production requires a live Stripe secret key (sk_live_...)');
+    const isLiveKey = stripeKey.startsWith('sk_live_');
+    const isTestKey = stripeKey.startsWith('sk_test_');
+    if (isProduction && !isLiveKey && !isTestKey) {
+      throw new Error('STRIPE_SECRET_KEY must be a valid Stripe secret key in production');
+    }
+    if (isProduction && isTestKey) {
+      logger.warn('[wallet/deposit] Stripe TEST key in production — payments are simulated, do not advertise live commerce');
     }
     const isDev = !isProduction && (process.env.NODE_ENV === 'development' || !stripeKey);
 

@@ -14,9 +14,18 @@
       }
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://bridger-api.azurewebsites.net",
+        "EXPO_PUBLIC_FACE_API_URL": "https://bridger-face.azurewebsites.net"
+      }
     },
-    "production": {}
+    "production": {
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://bridger-api.azurewebsites.net",
+        "EXPO_PUBLIC_FACE_API_URL": "https://bridger-face.azurewebsites.net"
+      }
+    }
   },
   "submit": {
     "production": {}
