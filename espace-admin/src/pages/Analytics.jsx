@@ -15,10 +15,152 @@ import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart,
 } from 'recharts'
-import { DollarSign, Users, CheckCircle2, RefreshCw, Loader2, AlertCircle } from 'lucide-react'
+import { DollarSign, Users, CheckCircle2, RefreshCw, Loader2, AlertCircle, Wallet, ArrowRightLeft, Info, BookOpen, ChevronDown } from 'lucide-react'
 import KpiCard from '../components/shared/KpiCard'
 import ChartCard from '../components/shared/ChartCard'
 import api from '../services/api'
+
+// Fee model — kept in sync with the per-deal breakdown elsewhere in the app.
+//  • Service Fee  4.0%  → Bridger margin (net benefit)
+//  • Logistics   12.0%  → traveler payout (pass-through)
+//  • Insurance    1.5%  → insurance partner (pass-through)
+//  • Item value   100%  → seller / traveler (pass-through)
+const FEE_RATE          = 0.04
+const PASS_THROUGH_MULT = 1 + 0.12 + 0.015   // 1.135
+
+// Metric Definitions — used by the Glossary panel at the bottom of the page.
+const METRIC_DEFS = [
+  {
+    name: 'Total Net Benefit',
+    aggregates: 'The 4% service fee earned across all GMV in the selected period.',
+    calc: 'Σ(monthly GMV) × 0.04 over the active period (12m / 6m / 30d).',
+    insight: 'Bridger\'s exclusive margin — the only revenue the platform retains. Use it as the headline P&L number for the period.',
+  },
+  {
+    name: 'Total Pass-Through Value',
+    aggregates: 'Item value + 12% logistics + 1.5% insurance routed through escrow to third parties.',
+    calc: 'Σ(monthly GMV) × (1 + 0.12 + 0.015) = GMV × 1.135.',
+    insight: 'Marketplace throughput Bridger facilitates but does not retain. Tracks gross volume under custody and exposure, distinct from earnings.',
+  },
+  {
+    name: 'Total Users',
+    aggregates: 'Cumulative user accounts in the database.',
+    calc: 'COUNT(*) FROM users (server-side, returned via /admin/analytics).',
+    insight: 'Top-of-funnel scale. Pair with User Growth and Match Rate to read activation health.',
+  },
+  {
+    name: 'Total Deals',
+    aggregates: 'Cumulative deal records, all statuses.',
+    calc: 'COUNT(*) FROM deals.',
+    insight: 'Lifetime marketplace activity. Indicates depth of supply and demand on the platform.',
+  },
+  {
+    name: 'Match Rate',
+    aggregates: 'Share of deals that progressed past OPEN into MATCHED or beyond.',
+    calc: '(deals with status ∈ MATCHED…COMPLETED) ÷ totalDeals × 100.',
+    insight: 'Marketplace liquidity. A low match rate flags supply-demand imbalance on routes or pricing friction.',
+  },
+  {
+    name: 'GMV Trends',
+    aggregates: 'Sum of deal prices grouped by month for the last 12 months (sliced by selected period).',
+    calc: 'Σ(deal.price) GROUP BY month(deal.createdAt). Period selector slices the trailing 30d / 6m / 12m.',
+    insight: 'Top-line marketplace volume over time — drives both Net Benefit (×4%) and Pass-Through (×113.5%). Watch the slope for growth or contraction.',
+  },
+  {
+    name: 'Top Performing Routes',
+    aggregates: 'Top city pairs by shipment count.',
+    calc: 'COUNT(*) GROUP BY (fromCity, toCity) ORDER BY count DESC LIMIT 5.',
+    insight: 'Where the network is densest. Concentrated demand routes are levers for incentives, capacity ops, and pricing experiments.',
+  },
+  {
+    name: 'Deal Categories',
+    aggregates: 'Distribution of deals across packageSize buckets.',
+    calc: 'Per category: count / totalDeals × 100, expressed as a percentage of the donut.',
+    insight: 'Product mix. Shifts here predict logistics cost (large items) and insurance exposure (high-value categories).',
+  },
+  {
+    name: 'User Growth',
+    aggregates: 'New user registrations per month for the last 12 months.',
+    calc: 'COUNT(*) FROM users GROUP BY month(createdAt).',
+    insight: 'Acquisition velocity. Compare against GMV trends to see whether new users translate into transactions.',
+  },
+  {
+    name: 'Deals by Destination Country',
+    aggregates: 'Top 6 destination countries, switchable between value (GMV) and volume (deal count).',
+    calc: 'Value mode: Σ(deal.price) GROUP BY country. Volume mode: COUNT(*) GROUP BY country. Both ORDER BY metric DESC LIMIT 6.',
+    insight: 'Geographic concentration of demand. Drives expansion priorities, FX hedging needs, and country-level compliance focus.',
+  },
+]
+
+function PrimarySummaryCard({ label, value, sublabel, icon, accent, definition }) {
+  return (
+    <div className="relative bg-surface-container-lowest rounded-2xl shadow-card border border-surface-container overflow-hidden">
+      <div className="h-1" style={{ backgroundColor: accent }} />
+      <div className="p-6">
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold tracking-[0.14em] uppercase text-on-surface-variant">{label}</span>
+              <span className="group relative inline-flex">
+                <Info className="w-3.5 h-3.5 text-on-surface-variant/50 cursor-help" />
+                <span className="invisible group-hover:visible absolute z-20 left-0 top-5 w-64 bg-surface-container-highest text-on-surface text-[11px] leading-relaxed rounded-lg p-3 shadow-xl border border-surface-container-high">
+                  {definition}
+                </span>
+              </span>
+            </div>
+            <p className="text-[34px] font-semibold text-on-surface leading-none mt-3 tabular-nums">{value}</p>
+            {sublabel && <p className="text-xs text-on-surface-variant mt-1.5">{sublabel}</p>}
+          </div>
+          <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ backgroundColor: accent + '1A' }}>
+            {icon}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MetricGlossary() {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="bg-surface-container-lowest rounded-xl shadow-card border border-surface-container">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full px-5 py-4 flex items-center justify-between hover:bg-surface-container-low/30 transition-colors"
+      >
+        <span className="flex items-center gap-2">
+          <BookOpen className="w-4 h-4 text-primary-container" />
+          <span className="text-sm font-semibold text-on-surface">Metric Definitions</span>
+          <span className="text-xs text-on-surface-variant">— what each card and chart on this page means</span>
+        </span>
+        <ChevronDown className={`w-4 h-4 text-on-surface-variant transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="border-t border-surface-container px-5 py-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+          {METRIC_DEFS.map(m => (
+            <div key={m.name} className="bg-surface-container-low/30 rounded-lg p-3.5">
+              <p className="text-sm font-semibold text-on-surface">{m.name}</p>
+              <dl className="mt-2 space-y-1.5 text-[11.5px] leading-relaxed">
+                <div>
+                  <dt className="text-[10px] font-bold tracking-wider uppercase text-on-surface-variant/70">Aggregates</dt>
+                  <dd className="text-on-surface-variant">{m.aggregates}</dd>
+                </div>
+                <div>
+                  <dt className="text-[10px] font-bold tracking-wider uppercase text-on-surface-variant/70">Calculation</dt>
+                  <dd className="text-on-surface-variant font-mono">{m.calc}</dd>
+                </div>
+                <div>
+                  <dt className="text-[10px] font-bold tracking-wider uppercase text-on-surface-variant/70">Insight</dt>
+                  <dd className="text-on-surface-variant">{m.insight}</dd>
+                </div>
+              </dl>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 const ChartTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
@@ -82,19 +224,45 @@ export default function Analytics() {
   const maxRouteCount = Math.max(...topRoutes.map(r => r.count), 1)
   const catTotal      = dealsByCategory.reduce((a, b) => a + b.value, 0) || 1
 
+  // Period GMV drives the primary summary cards. Sliced to match the chart selector.
+  const periodGmv      = revenueChartData.reduce((s, r) => s + (r.revenue ?? 0), 0)
+  const totalNetBenefit  = Math.round(periodGmv * FEE_RATE)
+  const totalPassThrough = Math.round(periodGmv * PASS_THROUGH_MULT)
+  const periodLabel = period === '30d' ? 'last 2 months' : period === '6m' ? 'last 6 months' : 'last 12 months'
+
   return (
     <div className="p-6 max-w-[1400px] mx-auto space-y-5 pb-10">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-semibold text-on-surface">Analytics</h1>
-        <p className="text-sm text-on-surface-variant mt-0.5">Deep-dive platform metrics for strategic decisions</p>
+        <p className="text-sm text-on-surface-variant mt-0.5">Net benefit, pass-through volume, and platform health for the {periodLabel}</p>
       </div>
 
-      {/* KPIs — driven by /admin/analytics kpis */}
-      <div className="grid grid-cols-3 gap-4">
-        <KpiCard label="Total Users"    value={kpis.totalUsers?.toLocaleString() ?? '—'}    changeType="neutral" icon={<Users        className="w-4 h-4 text-blue-600" />}    accentColor="#3B82F6" />
-        <KpiCard label="Total Deals"    value={kpis.totalDeals?.toLocaleString() ?? '—'}    changeType="neutral" icon={<DollarSign   className="w-4 h-4 text-emerald-600" />} accentColor="#059669" />
-        <KpiCard label="Match Rate"     value={`${kpis.matchRate ?? 0}%`}                    changeType="neutral" icon={<CheckCircle2 className="w-4 h-4 text-teal-600" />}    accentColor="#0D9488" />
+      {/* Primary summary cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <PrimarySummaryCard
+          label="Total Net Benefit"
+          value={`$${totalNetBenefit.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+          sublabel={`Exclusive Bridger margin · 4% of $${periodGmv.toLocaleString()} GMV (${periodLabel})`}
+          icon={<Wallet className="w-5 h-5 text-emerald-600" />}
+          accent="#059669"
+          definition="Aggregates the 4% service fee earned across all GMV in the active period — Σ(monthly GMV) × 0.04. This is the only revenue Bridger retains."
+        />
+        <PrimarySummaryCard
+          label="Total Pass-Through Value"
+          value={`$${totalPassThrough.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+          sublabel={`Item value + logistics (12%) + insurance (1.5%) routed through escrow (${periodLabel})`}
+          icon={<ArrowRightLeft className="w-5 h-5 text-blue-600" />}
+          accent="#3B82F6"
+          definition="Aggregates funds Bridger facilitates but does not keep — Σ(monthly GMV) × 1.135. Indicates marketplace throughput and the gross amount under custody, distinct from earnings."
+        />
+      </div>
+
+      {/* Secondary KPIs — driven by /admin/analytics kpis */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <KpiCard label="Total Users"    value={kpis.totalUsers?.toLocaleString() ?? '—'}    sublabel="All accounts on file"     changeType="neutral" icon={<Users        className="w-4 h-4 text-blue-600" />}    accentColor="#3B82F6" />
+        <KpiCard label="Total Deals"    value={kpis.totalDeals?.toLocaleString() ?? '—'}    sublabel="All statuses, lifetime"   changeType="neutral" icon={<DollarSign   className="w-4 h-4 text-emerald-600" />} accentColor="#059669" />
+        <KpiCard label="Match Rate"     value={`${kpis.matchRate ?? 0}%`}                    sublabel="Deals progressed past OPEN" changeType="neutral" icon={<CheckCircle2 className="w-4 h-4 text-teal-600" />}    accentColor="#0D9488" />
       </div>
 
       {/* Revenue (GMV) Trends — full width */}
@@ -249,6 +417,8 @@ export default function Analytics() {
           <p className="text-sm text-on-surface-variant text-center py-8">No country data yet</p>
         )}
       </ChartCard>
+
+      <MetricGlossary />
     </div>
   )
 }

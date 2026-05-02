@@ -13,7 +13,7 @@
  */
 import { useState, useEffect, useCallback } from 'react'
 import {
-  AlertTriangle, Plane, Car, Bus, Ship, Star, Flag, Ban,
+  AlertTriangle, Plane, Car, Bus, Ship, Star, FileText, Ban,
   Eye, Search, ChevronDown, MapPin, Loader2, AlertCircle,
   X, Calendar, User, Shield
 } from 'lucide-react'
@@ -585,13 +585,12 @@ export default function TripPosts() {
                           <button onClick={() => openDrawer(trip)} className="p-1.5 rounded-lg hover:bg-surface-container-high text-on-surface-variant transition-colors" title="View">
                             <Eye className="w-4 h-4" />
                           </button>
-                          {/* Fill icon if already flagged so state is visible */}
                           <button
                             onClick={() => handleAction(trip, 'flag')}
-                            className={`p-1.5 rounded-lg transition-colors ${trip.flagged ? 'bg-amber-100 text-amber-600' : 'hover:bg-amber-50 text-amber-500'}`}
-                            title={trip.flagged ? 'Unflag' : 'Flag'}
+                            className={`p-1.5 rounded-lg transition-colors ${trip.flagged ? 'bg-blue-100 text-blue-600' : 'hover:bg-blue-50 text-blue-500'}`}
+                            title={trip.flagged ? 'Remove report' : 'Report trip'}
                           >
-                            <Flag className={`w-4 h-4 ${trip.flagged ? 'fill-amber-500' : ''}`} />
+                            <FileText className="w-4 h-4" />
                           </button>
                           {trip.status !== 'CANCELLED' && trip.status !== 'COMPLETED' && (
                             <button
