@@ -497,7 +497,9 @@ router.post('/webhook', async (req, res, next) => {
       // Dev: parse raw body without signature verification (log warning)
       const logger = require('../utils/logger').default;
       logger.warn('[DEV] Stripe webhook signature verification skipped');
-      event = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+      event = Buffer.isBuffer(req.body)
+        ? JSON.parse(req.body.toString('utf8'))
+        : typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
     }
 
     const io = getIO();

@@ -84,6 +84,11 @@ const adminLimiter = rateLimit({
 });
 app.use('/admin', adminLimiter);
 
+// Stripe webhook needs the raw request body (bytes) so the SDK can verify the
+// signature. This MUST be registered before express.json() — once json() runs
+// the original bytes are gone and constructEvent throws.
+app.use('/wallet/webhook', express.raw({ type: 'application/json' }));
+
 // Raise body limit so base64-encoded deal images (can be several MB) aren't
 // rejected as "payload too large" — without this, deals post with empty images
 // and only the sender sees the photos via their local store.
