@@ -1,7 +1,31 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, CheckCircle, X, AlertTriangle, ShieldCheck, ChevronDown, Loader2, AlertCircle } from 'lucide-react'
+import { ArrowLeft, CheckCircle, X, AlertTriangle, ShieldCheck, ChevronDown, Loader2, AlertCircle, FileText, MapPin, User as UserIcon, Camera, ExternalLink } from 'lucide-react'
 import api from '../services/api'
+
+// Document-type grouping. Anything not matched falls under "Other".
+const DOC_TYPE_META = {
+  ID_CARD:         { label: 'Identity Card',        icon: ShieldCheck, group: 'identity' },
+  PASSPORT:        { label: 'Passport',             icon: ShieldCheck, group: 'identity' },
+  DRIVING_LICENSE: { label: 'Driving License',      icon: ShieldCheck, group: 'identity' },
+  FRONT:           { label: 'ID — Front',           icon: ShieldCheck, group: 'identity' },
+  BACK:            { label: 'ID — Back',            icon: ShieldCheck, group: 'identity' },
+  SELFIE:          { label: 'Selfie',               icon: Camera,      group: 'selfie' },
+  PROOF_OF_ADDRESS:{ label: 'Proof of Address',     icon: MapPin,      group: 'address' },
+  UTILITY_BILL:    { label: 'Utility Bill',         icon: MapPin,      group: 'address' },
+  BANK_STATEMENT:  { label: 'Bank Statement',       icon: FileText,    group: 'address' },
+}
+
+const STATUS_BADGE = {
+  APPROVED: 'bg-emerald-100 text-emerald-700',
+  PENDING:  'bg-amber-100 text-amber-700',
+  SUBMITTED:'bg-amber-100 text-amber-700',
+  REJECTED: 'bg-red-100 text-red-700',
+}
+
+function metaFor(type) {
+  return DOC_TYPE_META[type] || { label: type || 'Document', icon: FileText, group: 'other' }
+}
 
 const REJECT_REASONS = [
   'Document expired',
@@ -175,9 +199,17 @@ export default function UserKycPreview() {
 
   const user       = kycData.user
   const documents  = kycData.documents || []
-  const frontDoc   = documents.find(d => d.documentType === 'FRONT') || documents[0]
-  const backDoc    = documents.find(d => d.documentType === 'BACK')
-  const selfieDoc  = documents.find(d => d.documentType === 'SELFIE')
+
+  // Group docs so we can render each verification category as its own section.
+  const grouped = documents.reduce((acc, d) => {
+    const g = metaFor(d.documentType).group
+    ;(acc[g] = acc[g] || []).push(d)
+    return acc
+  }, {})
+  const identityDocs = grouped.identity || []
+  const selfieDocs   = grouped.selfie   || []
+  const addressDocs  = grouped.address  || []
+  const otherDocs    = grouped.other    || []
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-6 pb-12">
@@ -225,83 +257,206 @@ export default function UserKycPreview() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Documents column */}
           <div className="lg:col-span-2 space-y-5">
-            {/* Identity documents */}
+            {/* Identity documents — one card per uploaded ID document */}
             <div className="bg-surface-container-lowest rounded-xl shadow-card p-6">
               <h3 className="text-sm font-semibold text-on-surface mb-4 flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-primary-container" /> Identity Documents
+                <span className="ml-auto text-[11px] text-on-surface-variant font-normal">{identityDocs.length} uploaded</span>
               </h3>
-              <div className="grid grid-cols-2 gap-4">
-                <DocCard title="Document — Front" bg="bg-slate-100">
-                  {frontDoc?.frontUrl ? (
-                    <img src={frontDoc.frontUrl} alt="Front" className="max-h-full max-w-full object-contain rounded-lg" />
-                  ) : (
-                    <div className="text-center">
-                      <div className="w-16 h-12 bg-slate-300 rounded-lg mx-auto mb-2 flex items-center justify-center">
-                        <ShieldCheck className="w-6 h-6 text-slate-500" />
+
+              {identityDocs.length === 0 ? (
+                <div className="bg-surface-container-low rounded-xl p-6 text-center text-xs text-on-surface-variant">
+                  No identity documents uploaded.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {identityDocs.map(doc => {
+                    const meta = metaFor(doc.documentType)
+                    const Icon = meta.icon
+                    return (
+                      <div key={doc.id} className="bg-surface-container-low rounded-xl p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <Icon className="w-4 h-4 text-on-surface-variant" />
+                            <p className="text-xs font-bold tracking-wider uppercase text-on-surface">{meta.label}</p>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${STATUS_BADGE[doc.status] || 'bg-gray-100 text-gray-600'}`}>
+                              {doc.status || 'PENDING'}
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-on-surface-variant">
+                            {doc.createdAt ? new Date(doc.createdAt).toLocaleString() : '—'}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <DocCard title="Front" bg="bg-slate-100">
+                            {doc.frontUrl ? (
+                              <a href={doc.frontUrl} target="_blank" rel="noreferrer">
+                                <img src={doc.frontUrl} alt={`${meta.label} front`} className="max-h-32 max-w-full object-contain rounded-lg" />
+                              </a>
+                            ) : (
+                              <div className="text-xs text-on-surface-variant">No image</div>
+                            )}
+                          </DocCard>
+                          <DocCard title="Back" bg="bg-slate-100">
+                            {doc.backUrl ? (
+                              <a href={doc.backUrl} target="_blank" rel="noreferrer">
+                                <img src={doc.backUrl} alt={`${meta.label} back`} className="max-h-32 max-w-full object-contain rounded-lg" />
+                              </a>
+                            ) : (
+                              <div className="text-xs text-on-surface-variant">N/A</div>
+                            )}
+                          </DocCard>
+                        </div>
                       </div>
-                      <p className="text-xs text-on-surface-variant">No image</p>
-                    </div>
-                  )}
-                </DocCard>
-                <DocCard title="Document — Back" bg="bg-slate-100">
-                  {backDoc?.backUrl ? (
-                    <img src={backDoc.backUrl} alt="Back" className="max-h-full max-w-full object-contain rounded-lg" />
-                  ) : (
-                    <div className="text-center">
-                      <div className="w-16 h-12 bg-slate-300 rounded-lg mx-auto mb-2 flex items-center justify-center">
-                        <ShieldCheck className="w-6 h-6 text-slate-500" />
-                      </div>
-                      <p className="text-xs text-on-surface-variant">No image</p>
-                    </div>
-                  )}
-                </DocCard>
-              </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
 
-            {/* Selfie */}
+            {/* Selfie / Biometric */}
             <div className="bg-surface-container-lowest rounded-xl shadow-card p-6">
-              <h3 className="text-sm font-semibold text-on-surface mb-4">Selfie Verification</h3>
-              <div className="bg-surface-container-low rounded-xl p-4 flex items-center gap-5">
-                {selfieDoc?.frontUrl ? (
-                  <img src={selfieDoc.frontUrl} alt="Selfie" className="w-20 h-24 rounded-xl object-cover flex-shrink-0" />
+              <h3 className="text-sm font-semibold text-on-surface mb-4 flex items-center gap-2">
+                <Camera className="w-4 h-4 text-primary-container" /> Selfie & Biometric
+              </h3>
+              <div className="bg-surface-container-low rounded-xl p-4 flex items-start gap-5">
+                {selfieDocs[0]?.frontUrl ? (
+                  <a href={selfieDocs[0].frontUrl} target="_blank" rel="noreferrer">
+                    <img src={selfieDocs[0].frontUrl} alt="Selfie" className="w-20 h-24 rounded-xl object-cover flex-shrink-0" />
+                  </a>
                 ) : (
                   <div className="w-20 h-24 bg-slate-200 rounded-xl flex items-center justify-center flex-shrink-0">
-                    <div className="w-10 h-10 rounded-full bg-slate-400 mb-1" />
+                    <UserIcon className="w-8 h-8 text-slate-400" />
                   </div>
                 )}
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-emerald-600" />
+                <div className="space-y-2 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <CheckCircle className={`w-4 h-4 ${user?.faceVerificationStatus === 'VERIFIED' ? 'text-emerald-600' : 'text-amber-500'}`} />
                     <span className="text-sm font-medium text-on-surface">Biometric Match</span>
-                    <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold">
-                      {selfieDoc ? 'Verified' : 'Pending'}
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                      user?.faceVerificationStatus === 'VERIFIED'
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-amber-100 text-amber-700'
+                    }`}>
+                      {user?.faceVerificationStatus || 'PENDING'}
                     </span>
                   </div>
-                  <p className="text-xs text-on-surface-variant">
-                    {selfieDoc ? 'Liveness check passed. Face matches document.' : 'Selfie not provided.'}
-                  </p>
+                  <div className="text-xs text-on-surface-variant space-y-1">
+                    <p>Confidence: <span className="font-semibold text-on-surface">{user?.faceConfidenceScore != null ? `${Math.round(user.faceConfidenceScore * 100)}%` : '—'}</span></p>
+                    <p>Verified at: <span className="font-semibold text-on-surface">{user?.faceVerifiedAt ? new Date(user.faceVerifiedAt).toLocaleString() : '—'}</span></p>
+                  </div>
                 </div>
               </div>
             </div>
+
+            {/* Proof of Address */}
+            <div className="bg-surface-container-lowest rounded-xl shadow-card p-6">
+              <h3 className="text-sm font-semibold text-on-surface mb-4 flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-primary-container" /> Proof of Address
+                <span className="ml-auto text-[11px] text-on-surface-variant font-normal">{addressDocs.length} uploaded</span>
+              </h3>
+              {addressDocs.length === 0 ? (
+                <div className="bg-surface-container-low rounded-xl p-6 text-center text-xs text-on-surface-variant">
+                  No proof-of-address documents on file.
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  {addressDocs.map(doc => {
+                    const meta = metaFor(doc.documentType)
+                    return (
+                      <DocCard key={doc.id} title={meta.label} bg="bg-slate-100">
+                        {doc.frontUrl ? (
+                          <a href={doc.frontUrl} target="_blank" rel="noreferrer">
+                            <img src={doc.frontUrl} alt={meta.label} className="max-h-28 max-w-full object-contain rounded-lg" />
+                          </a>
+                        ) : (
+                          <div className="text-xs text-on-surface-variant">No image</div>
+                        )}
+                      </DocCard>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Other / unrecognized documents */}
+            {otherDocs.length > 0 && (
+              <div className="bg-surface-container-lowest rounded-xl shadow-card p-6">
+                <h3 className="text-sm font-semibold text-on-surface mb-4 flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-primary-container" /> Other Uploads
+                </h3>
+                <ul className="space-y-2 text-sm">
+                  {otherDocs.map(doc => (
+                    <li key={doc.id} className="flex items-center justify-between bg-surface-container-low rounded-lg px-3 py-2">
+                      <div>
+                        <p className="font-medium text-on-surface">{doc.documentType || 'Unknown'}</p>
+                        <p className="text-[11px] text-on-surface-variant">
+                          {doc.status || 'PENDING'} · {doc.createdAt ? new Date(doc.createdAt).toLocaleDateString() : '—'}
+                        </p>
+                      </div>
+                      {doc.frontUrl && (
+                        <a href={doc.frontUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-primary-container hover:underline text-xs">
+                          <ExternalLink className="w-3 h-3" /> View
+                        </a>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
 
-          {/* Details column */}
+          {/* Details column — full profile audit */}
           <div className="space-y-5">
-            {/* Document metadata */}
             <div className="bg-surface-container-lowest rounded-xl shadow-card p-6">
-              <h3 className="text-sm font-semibold text-on-surface mb-4">Document Details</h3>
-              <div className="space-y-3 text-sm">
+              <h3 className="text-sm font-semibold text-on-surface mb-4">Profile Audit</h3>
+              <div className="space-y-2.5 text-sm">
                 {[
-                  ['Doc Type',    frontDoc?.documentType || 'N/A'],
-                  ['Country',     'Tunisia (TN)'],
-                  ['Status',      user?.kycStatus || 'UNKNOWN'],
-                  ['Submitted',   frontDoc ? new Date(frontDoc.createdAt).toLocaleDateString() : '—'],
+                  ['User ID',         user?.id],
+                  ['Name',            user?.name],
+                  ['Phone',           user?.phone],
+                  ['Email',           user?.email],
+                  ['ID Number',       user?.idDocumentNumber],
+                  ['KYC Status',      user?.kycStatus],
+                  ['Face Verify',     user?.faceVerificationStatus],
+                  ['Banned',          user?.banned ? 'Yes' : 'No'],
+                  ['Member Since',    user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : null],
+                  ['Last Login',      user?.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : null],
                 ].map(([k, v]) => (
-                  <div key={k} className="flex justify-between">
-                    <span className="text-on-surface-variant">{k}</span>
-                    <span className={`font-medium ${v.startsWith('✓') ? 'text-emerald-600' : 'text-on-surface'}`}>{v}</span>
+                  <div key={k} className="flex justify-between gap-3">
+                    <span className="text-on-surface-variant flex-shrink-0">{k}</span>
+                    <span className="font-medium text-on-surface text-right truncate">{v ?? '—'}</span>
                   </div>
                 ))}
+              </div>
+            </div>
+
+            <div className="bg-surface-container-lowest rounded-xl shadow-card p-6">
+              <h3 className="text-sm font-semibold text-on-surface mb-3">Document Summary</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-on-surface-variant">Total Documents</span>
+                  <span className="font-semibold text-on-surface">{documents.length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-on-surface-variant">Identity</span>
+                  <span className="font-semibold text-on-surface">{identityDocs.length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-on-surface-variant">Selfie</span>
+                  <span className="font-semibold text-on-surface">{selfieDocs.length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-on-surface-variant">Address</span>
+                  <span className="font-semibold text-on-surface">{addressDocs.length}</span>
+                </div>
+                {otherDocs.length > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-on-surface-variant">Other</span>
+                    <span className="font-semibold text-on-surface">{otherDocs.length}</span>
+                  </div>
+                )}
               </div>
             </div>
 

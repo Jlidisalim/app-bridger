@@ -14,7 +14,7 @@
  */
 import React, { useState, useEffect, useCallback } from 'react'
 import {
-  CreditCard, Landmark, Wallet, ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, Clock, Send, TrendingUp, Coins,
   Lock, DollarSign, Package, AlertTriangle, Loader2, AlertCircle,
 } from 'lucide-react'
 import KpiCard from '../components/shared/KpiCard'
@@ -39,43 +39,224 @@ const STATUS_MAP = {
 // Statuses that have funds in escrow (not yet released/refunded)
 const ESCROW_STATUSES = new Set(['MATCHED', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED'])
 
-// ── Mediterranean Map (unchanged UI) ─────────────────────────────────────────
-const PORTS = [
-  { name: 'Tunis',     x: 51, y: 47 },
-  { name: 'Marseille', x: 40, y: 32 },
-  { name: 'Sfax',      x: 52, y: 52 },
-  { name: 'Valencia',  x: 28, y: 36 },
-  { name: 'Bizerte',   x: 50, y: 44 },
-  { name: 'Algiers',   x: 41, y: 44 },
-  { name: 'Genoa',     x: 43, y: 30 },
-]
-
-function MedMap() {
-  const [hovered, setHovered] = useState(null)
+// ── Dual-metric KPI card (Page Volume vs. Beneficial Value) ──────────────────
+function DualKpiCard({ left, right, className = '' }) {
   return (
-    <div className="relative w-full h-56 bg-gradient-to-b from-blue-50 to-blue-100 rounded-xl overflow-hidden border border-blue-200">
-      <svg viewBox="0 0 100 70" className="absolute inset-0 w-full h-full" preserveAspectRatio="none">
-        <ellipse cx="50" cy="55" rx="8" ry="5" fill="#e8d5b7" stroke="#d4b896" strokeWidth="0.3" opacity="0.8" />
-        <ellipse cx="42" cy="48" rx="5" ry="3" fill="#e8d5b7" stroke="#d4b896" strokeWidth="0.3" opacity="0.8" />
-        <ellipse cx="44" cy="26" rx="12" ry="8" fill="#e8d5b7" stroke="#d4b896" strokeWidth="0.3" opacity="0.8" />
-        <ellipse cx="28" cy="38" rx="7" ry="5" fill="#e8d5b7" stroke="#d4b896" strokeWidth="0.3" opacity="0.8" />
-        {[[51,47,40,32],[51,47,43,30],[51,47,28,36],[52,52,40,32],[41,44,40,32],[51,47,41,44]].map((line, i) => (
-          <line key={i} x1={line[0]} y1={line[1]} x2={line[2]} y2={line[3]} stroke="#3B82F6" strokeWidth="0.3" strokeDasharray="1,1" opacity="0.5" />
+    <div className={`bg-surface-container-lowest rounded-xl shadow-card border border-surface-container overflow-hidden ${className}`}>
+      <div className="flex h-[3px]">
+        <div className="flex-1" style={{ backgroundColor: left.color }} />
+        <div className="flex-1" style={{ backgroundColor: right.color }} />
+      </div>
+      <div className="grid grid-cols-2 divide-x divide-surface-container-high">
+        {[left, right].map((m, i) => (
+          <div key={i} className="p-5">
+            <div className="flex items-start justify-between mb-3">
+              <span className="text-[11px] font-semibold tracking-[0.12em] uppercase text-on-surface-variant">{m.label}</span>
+              {m.icon && (
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: m.color + '1A' }}>
+                  {m.icon}
+                </div>
+              )}
+            </div>
+            <div className="flex items-baseline gap-2 mb-2">
+              <span className="text-[22px] font-semibold text-on-surface leading-tight">{m.value}</span>
+            </div>
+            {m.sublabel && <span className="text-[11px] text-on-surface-variant">{m.sublabel}</span>}
+          </div>
         ))}
-        {PORTS.map(p => (
-          <g key={p.name} onMouseEnter={() => setHovered(p)} onMouseLeave={() => setHovered(null)} style={{ cursor: 'pointer' }}>
-            <circle cx={p.x} cy={p.y} r="1.8" fill="#1A2E82" opacity="0.85" />
-            <circle cx={p.x} cy={p.y} r="3.5" fill="#1A2E82" opacity="0.15" />
-          </g>
-        ))}
-      </svg>
-      {hovered && (
-        <div className="absolute top-2 left-2 bg-white rounded-lg shadow-lg px-3 py-2 text-xs border border-surface-container-high">
-          <p className="font-semibold text-on-surface">{hovered.name}</p>
+      </div>
+    </div>
+  )
+}
+
+// ── Pending Payouts Queue ────────────────────────────────────────────────────
+function PendingPayouts({ deals, onSelect }) {
+  const pending = deals
+    .filter(d => d.status === 'DELIVERED')
+    .map(d => ({ ...d, days: Math.floor((Date.now() - new Date(d.createdAt)) / 86400000) }))
+    .sort((a, b) => b.days - a.days)
+
+  return (
+    <div className="bg-surface-container-lowest rounded-xl shadow-card border border-surface-container p-5">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h3 className="text-sm font-semibold text-on-surface flex items-center gap-2">
+            <Send className="w-4 h-4 text-emerald-600" />
+            Pending Payouts
+          </h3>
+          <p className="text-xs text-on-surface-variant">Delivered, awaiting release</p>
         </div>
+        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">{pending.length}</span>
+      </div>
+      {pending.length === 0 ? (
+        <div className="py-8 text-center text-xs text-on-surface-variant">No payouts pending</div>
+      ) : (
+        <ul className="divide-y divide-surface-container max-h-56 overflow-y-auto">
+          {pending.map(d => (
+            <li
+              key={d.id}
+              onClick={() => onSelect(d)}
+              className="py-2.5 px-1 cursor-pointer hover:bg-surface-container-low/40 rounded transition-colors"
+            >
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-primary-container">#{d.id.slice(-8)}</span>
+                <span className="font-bold text-on-surface">{d.currency} {Number(d.price ?? 0).toLocaleString()}</span>
+              </div>
+              <div className="flex items-center justify-between mt-1 text-[11px] text-on-surface-variant">
+                <span>{d.fromCity} → {d.toCity}</span>
+                <span className={d.days >= 3 ? 'text-amber-600 font-semibold' : ''}>{d.days}d waiting</span>
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
-      <div className="absolute bottom-2 right-2 flex items-center gap-3 bg-white/80 backdrop-blur-sm rounded-lg px-2 py-1 text-[10px]">
-        <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-[#1A2E82]" /> Active Deals</div>
+    </div>
+  )
+}
+
+// ── Dispute Aging ────────────────────────────────────────────────────────────
+function DisputeAging({ deals, onSelect }) {
+  const disputed = deals
+    .filter(d => d.status === 'DISPUTED')
+    .map(d => ({ ...d, days: Math.floor((Date.now() - new Date(d.createdAt)) / 86400000) }))
+    .sort((a, b) => b.days - a.days)
+
+  // SLA: 3d at-risk, 7d breached
+  const slaCls = days => days >= 7 ? 'bg-red-100 text-red-700' : days >= 3 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+  const slaLabel = days => days >= 7 ? 'Breached' : days >= 3 ? 'At risk' : 'On track'
+
+  return (
+    <div className="bg-surface-container-lowest rounded-xl shadow-card border border-surface-container p-5">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h3 className="text-sm font-semibold text-on-surface flex items-center gap-2">
+            <Clock className="w-4 h-4 text-red-600" />
+            Dispute Aging
+          </h3>
+          <p className="text-xs text-on-surface-variant">SLA · 3d at-risk · 7d breached</p>
+        </div>
+        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-700">{disputed.length}</span>
+      </div>
+      {disputed.length === 0 ? (
+        <div className="py-8 text-center text-xs text-on-surface-variant">No open disputes</div>
+      ) : (
+        <ul className="divide-y divide-surface-container max-h-56 overflow-y-auto">
+          {disputed.map(d => (
+            <li
+              key={d.id}
+              onClick={() => onSelect(d)}
+              className="py-2.5 px-1 cursor-pointer hover:bg-surface-container-low/40 rounded transition-colors"
+            >
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-primary-container">#{d.id.slice(-8)}</span>
+                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${slaCls(d.days)}`}>
+                  {d.days}d · {slaLabel(d.days)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between mt-1 text-[11px] text-on-surface-variant">
+                <span>{d.fromCity} → {d.toCity}</span>
+                <span>{d.currency} {Number(d.price ?? 0).toLocaleString()}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+// ── Deal Status Funnel ───────────────────────────────────────────────────────
+function StatusFunnel({ deals }) {
+  const stages = [
+    { key: 'OPEN',       label: 'Open',       color: '#6B7280' },
+    { key: 'MATCHED',    label: 'Matched',    color: '#3B82F6' },
+    { key: 'IN_TRANSIT', label: 'In Transit', color: '#D97706' },
+    { key: 'DELIVERED',  label: 'Delivered',  color: '#0D9488' },
+    { key: 'COMPLETED',  label: 'Completed',  color: '#059669' },
+  ]
+  const counts = stages.map(s => deals.filter(d => d.status === s.key).length)
+  const max = Math.max(...counts, 1)
+
+  return (
+    <div className="bg-surface-container-lowest rounded-xl shadow-card border border-surface-container p-5">
+      <div className="mb-3">
+        <h3 className="text-sm font-semibold text-on-surface">Deal Status Funnel</h3>
+        <p className="text-xs text-on-surface-variant">Distribution across lifecycle stages</p>
+      </div>
+      <div className="space-y-2">
+        {stages.map((s, i) => (
+          <div key={s.key} className="flex items-center gap-3">
+            <span className="w-20 text-[11px] text-on-surface-variant">{s.label}</span>
+            <div className="flex-1 h-5 bg-surface-container-low/40 rounded-md overflow-hidden">
+              <div
+                className="h-full rounded-md transition-all"
+                style={{ width: `${(counts[i] / max) * 100}%`, backgroundColor: s.color, opacity: 0.85 }}
+              />
+            </div>
+            <span className="w-7 text-right text-xs font-semibold text-on-surface">{counts[i]}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Escrow Funds Flow (7-day) ────────────────────────────────────────────────
+function FundsFlow({ deals }) {
+  const DAYS = 7
+  const startOfDay = d => { const x = new Date(d); x.setHours(0,0,0,0); return x.getTime() }
+  const today = startOfDay(new Date())
+
+  const buckets = Array.from({ length: DAYS }, (_, i) => {
+    const ts = today - (DAYS - 1 - i) * 86400000
+    return { ts, held: 0, released: 0, refunded: 0 }
+  })
+
+  deals.forEach(d => {
+    const ts = startOfDay(d.createdAt)
+    const b = buckets.find(b => b.ts === ts)
+    if (!b) return
+    const amt = d.price ?? 0
+    if (d.status === 'COMPLETED') b.released += amt
+    else if (d.status === 'CANCELLED') b.refunded += amt
+    else if (ESCROW_STATUSES.has(d.status)) b.held += amt
+  })
+
+  const max = Math.max(...buckets.map(b => b.held + b.released + b.refunded), 1)
+
+  return (
+    <div className="bg-surface-container-lowest rounded-xl shadow-card border border-surface-container p-5">
+      <div className="mb-3">
+        <h3 className="text-sm font-semibold text-on-surface flex items-center gap-2">
+          <TrendingUp className="w-4 h-4 text-blue-600" />
+          Escrow Funds Flow
+        </h3>
+        <p className="text-xs text-on-surface-variant">Last 7 days · based on visible deals</p>
+      </div>
+      <div className="flex items-end gap-1.5 h-28 mb-2">
+        {buckets.map(b => (
+          <div
+            key={b.ts}
+            className="flex-1 flex flex-col-reverse gap-0.5"
+            title={`Held ${b.held.toLocaleString()} · Released ${b.released.toLocaleString()} · Refunded ${b.refunded.toLocaleString()}`}
+          >
+            <div style={{ height: `${(b.held / max) * 100}%`, backgroundColor: '#D97706' }} className="rounded-sm" />
+            <div style={{ height: `${(b.released / max) * 100}%`, backgroundColor: '#059669' }} className="rounded-sm" />
+            <div style={{ height: `${(b.refunded / max) * 100}%`, backgroundColor: '#DC2626' }} className="rounded-sm" />
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-between text-[10px] text-on-surface-variant mb-3">
+        {buckets.map(b => (
+          <span key={b.ts} className="flex-1 text-center">
+            {new Date(b.ts).toLocaleDateString(undefined, { weekday: 'short' })}
+          </span>
+        ))}
+      </div>
+      <div className="grid grid-cols-3 gap-2 text-[11px]">
+        <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-sm bg-amber-600" /><span className="text-on-surface-variant">Held</span></div>
+        <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-sm bg-emerald-600" /><span className="text-on-surface-variant">Released</span></div>
+        <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-sm bg-red-600" /><span className="text-on-surface-variant">Refunded</span></div>
       </div>
     </div>
   )
@@ -116,6 +297,7 @@ function QuickActions({ tx, onRelease, onRefund }) {
       <div className="border-t border-surface-container-high pt-3 space-y-1.5 text-sm">
         <p className="text-xs font-bold uppercase tracking-widest text-on-surface-variant/60 mb-2">Fee Breakdown</p>
         {[
+          ['Item Value',               `${tx.currency} ${amount.toLocaleString()}`],
           ['Service Fee (4%)',         `${tx.currency} ${fee.toLocaleString()}`],
           ['Logistics & Freight (12%)',`${tx.currency} ${logic.toLocaleString()}`],
           ['Insurance (1.5%)',         `${tx.currency} ${insur.toLocaleString()}`],
@@ -187,10 +369,12 @@ export default function DealsEscrow() {
   useEffect(() => { fetchDeals() }, [fetchDeals])
 
   // ── KPI computations from loaded page ─────────────────────────────────
-  const escrowDeals    = deals.filter(d => ESCROW_STATUSES.has(d.status))
-  const completedDeals = deals.filter(d => d.status === 'COMPLETED')
-  const disputedDeals  = deals.filter(d => d.status === 'DISPUTED')
-  const totalVolume    = deals.reduce((s, d) => s + (d.price ?? 0), 0)
+  const escrowDeals     = deals.filter(d => ESCROW_STATUSES.has(d.status))
+  const completedDeals  = deals.filter(d => d.status === 'COMPLETED')
+  const disputedDeals   = deals.filter(d => d.status === 'DISPUTED')
+  const totalVolume     = deals.reduce((s, d) => s + (d.price ?? 0), 0)
+  // Beneficial value = platform revenue (4% service fee on all deal volume)
+  const beneficialValue = Math.round(totalVolume * 0.04)
 
   // ── Release funds ──────────────────────────────────────────────────────
   function handleRelease(tx) {
@@ -251,11 +435,27 @@ export default function DealsEscrow() {
       )}
 
       {/* KPIs */}
-      <div className="grid grid-cols-4 gap-4">
-        <KpiCard label="Page Volume"     value={`$${totalVolume.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} changeType="neutral" icon={<DollarSign  className="w-4 h-4 text-blue-600" />}   accentColor="#3B82F6" />
-        <KpiCard label="In Escrow"       value={escrowDeals.length.toString()}    sublabel="Active transactions" changeType="neutral" icon={<Lock         className="w-4 h-4 text-amber-600" />}  accentColor="#D97706" />
-        <KpiCard label="Completed"       value={completedDeals.length.toString()} sublabel="This page"           changeType="neutral" icon={<Package      className="w-4 h-4 text-emerald-600" />} accentColor="#059669" />
-        <KpiCard label="Disputed"        value={disputedDeals.length.toString()}  sublabel="Open cases"          changeType="neutral" icon={<AlertTriangle className="w-4 h-4 text-red-600" />}   accentColor="#DC2626" />
+      <div className="grid grid-cols-5 gap-4">
+        <DualKpiCard
+          className="col-span-2"
+          left={{
+            label:    'Page Volume',
+            value:    `$${totalVolume.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
+            sublabel: 'Gross deal value',
+            icon:     <DollarSign className="w-4 h-4 text-blue-600" />,
+            color:    '#3B82F6',
+          }}
+          right={{
+            label:    'Beneficial Value',
+            value:    `$${beneficialValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
+            sublabel: 'Platform fees · 4%',
+            icon:     <Coins className="w-4 h-4 text-emerald-600" />,
+            color:    '#059669',
+          }}
+        />
+        <KpiCard label="In Escrow" value={escrowDeals.length.toString()}    sublabel="Active transactions" changeType="neutral" icon={<Lock         className="w-4 h-4 text-amber-600" />}  accentColor="#D97706" />
+        <KpiCard label="Completed" value={completedDeals.length.toString()} sublabel="This page"           changeType="neutral" icon={<Package      className="w-4 h-4 text-emerald-600" />} accentColor="#059669" />
+        <KpiCard label="Disputed"  value={disputedDeals.length.toString()}  sublabel="Open cases"          changeType="neutral" icon={<AlertTriangle className="w-4 h-4 text-red-600" />}   accentColor="#DC2626" />
       </div>
 
       {/* Main content + quick actions */}
@@ -360,13 +560,12 @@ export default function DealsEscrow() {
             />
           </div>
 
-          {/* Mediterranean Map */}
-          <div className="bg-surface-container-lowest rounded-xl shadow-card border border-surface-container p-5">
-            <div className="mb-3">
-              <h3 className="text-sm font-semibold text-on-surface">Live Logistics Intelligence</h3>
-              <p className="text-xs text-on-surface-variant">Mediterranean Corridor Activity</p>
-            </div>
-            <MedMap />
+          {/* Operational modules */}
+          <div className="grid grid-cols-2 gap-4">
+            <PendingPayouts deals={deals} onSelect={setSelected} />
+            <DisputeAging   deals={deals} onSelect={setSelected} />
+            <StatusFunnel   deals={deals} />
+            <FundsFlow      deals={deals} />
           </div>
         </div>
 
