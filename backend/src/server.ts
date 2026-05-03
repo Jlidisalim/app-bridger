@@ -95,8 +95,14 @@ app.use('/wallet/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
-// Serve uploaded files (avatar, deal, face, kyc) from backend/uploads/
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Serve uploaded files (avatar, deal, face, kyc).
+// On Azure App Service, UPLOADS_DIR should be set to /home/data/uploads so
+// the files persist across deploys (everything under wwwroot is wiped on
+// each deploy). Falls back to backend/uploads/ for local development.
+app.use(
+  '/uploads',
+  express.static(process.env.UPLOADS_DIR || path.join(__dirname, '../uploads'))
+);
 
 // Serve static legal documents (terms, privacy) from backend/public/legal/
 // — kept here so the same backend deploy ships the agreements that the mobile

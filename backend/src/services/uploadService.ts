@@ -2,8 +2,11 @@ import fs from 'fs';
 import path from 'path';
 import logger from '../utils/logger';
 
-// Root uploads directory — sits one level above src/ (i.e. backend/uploads/)
-const UPLOADS_ROOT = path.join(__dirname, '../../uploads');
+// Root uploads directory.
+// On Azure App Service, set UPLOADS_DIR=/home/data/uploads — that path lives
+// outside wwwroot so it survives every deploy. Locally it defaults to
+// backend/uploads/ (one level above src/).
+const UPLOADS_ROOT = process.env.UPLOADS_DIR || path.join(__dirname, '../../uploads');
 
 // ── File validation constants (exported for reuse in multer config) ──────────
 export const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
