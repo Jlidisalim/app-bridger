@@ -510,10 +510,24 @@ router.post('/webhook', async (req, res, next) => {
         const userId = paymentIntent.metadata?.userId;
         if (userId) {
           const amount = paymentIntent.amount / 100;
+          // The mobile Wallet screen reads Wallet.balance / Wallet.availableBalance,
+          // not User.walletBalance — both must be incremented or the UI shows 0.
           await prisma.$transaction([
             prisma.user.update({
               where: { id: userId },
               data: { walletBalance: { increment: amount } },
+            }),
+            prisma.wallet.upsert({
+              where: { userId },
+              update: {
+                balance:          { increment: amount },
+                availableBalance: { increment: amount },
+              },
+              create: {
+                userId,
+                balance:          amount,
+                availableBalance: amount,
+              },
             }),
             prisma.transaction.updateMany({
               where: { userId, status: 'PENDING', type: 'DEPOSIT' },
