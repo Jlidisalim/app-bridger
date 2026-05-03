@@ -25,6 +25,7 @@ router.get('/stats', async (req: Request, res: Response, next: NextFunction) => 
       dealStatusGroups,
       openDisputes,
       kycPending,
+      kycManualReview,
       openTasks,
       recentDeals,
     ] = await Promise.all([
@@ -33,6 +34,7 @@ router.get('/stats', async (req: Request, res: Response, next: NextFunction) => 
       prisma.deal.groupBy({ by: ['status'], _count: { _all: true } }),
       prisma.dispute.count({ where: { status: { in: ['OPENED', 'EVIDENCE_SUBMITTED', 'ADMIN_REVIEWING'] } } }),
       prisma.user.count({ where: { kycStatus: 'PENDING' } }),
+      prisma.user.count({ where: { kycStatus: 'MANUAL_REVIEW' } }),
       prisma.adminTask.count({ where: { status: 'OPEN' } }),
       prisma.deal.findMany({
         where: { createdAt: { gte: ago30 } },
@@ -94,7 +96,7 @@ router.get('/stats', async (req: Request, res: Response, next: NextFunction) => 
     ];
 
     res.json({
-      kpis: { totalUsers, totalDeals, successfulMatches, matchRate, openDisputes, kycPending, openTasks },
+      kpis: { totalUsers, totalDeals, successfulMatches, matchRate, openDisputes, kycPending, kycManualReview, openTasks },
       dealsByStatus,
       dailyActivity,
       topRoutes,
@@ -849,6 +851,8 @@ router.patch('/users/:id/kyc', async (req: Request, res: Response, next: NextFun
       return res.json({ document: doc });
     }
 
+    // Admin finalizing a manual-review case clears the auto-set `flagged`
+    // bit so the user no longer appears in the moderation queue.
     const [, updatedUser] = await prisma.$transaction([
       prisma.kycDocument.updateMany({
         where: { userId: user.id },
@@ -856,8 +860,13 @@ router.patch('/users/:id/kyc', async (req: Request, res: Response, next: NextFun
       }),
       prisma.user.update({
         where: { id: user.id },
-        data: { kycStatus: status } as any,
-        select: { id: true, kycStatus: true },
+        data: {
+          kycStatus: status,
+          flagged: false,
+          faceVerificationStatus: status === 'APPROVED' ? 'VERIFIED' : 'FAILED',
+          faceVerifiedAt: status === 'APPROVED' ? new Date() : null,
+        } as any,
+        select: { id: true, kycStatus: true, flagged: true, faceVerificationStatus: true },
       }),
     ]);
 

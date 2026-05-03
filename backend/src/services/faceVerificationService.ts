@@ -3,6 +3,11 @@ import FormData from 'form-data';
 import config from '../config/env';
 import { prisma } from '../config/db';
 import logger from '../utils/logger';
+import {
+  KYC_STATUS,
+  decideKycFromConfidence,
+  type KycDecision,
+} from '../constants/kycStatus';
 
 const FACE_API = config.faceService.url;
 
@@ -233,16 +238,24 @@ export const faceVerificationService = {
 
   /**
    * Store face embedding and update verification status in database.
+   *
+   * Applies the tiered KYC decision based on the ML confidence score:
+   *   - confidence >= 0.50 → APPROVED   (auto-passed)
+   *   - 0.20 <= c < 0.50   → MANUAL_REVIEW (routed to admin dashboard)
+   *   - confidence <  0.20 → REJECTED   (auto-rejected)
+   *
    * Throws a 409 error (DUPLICATE_ID_DOCUMENT) if another user already
    * registered with the same ID card number.
+   *
+   * Returns the resolved decision so callers can surface the tier to clients.
    */
   async saveVerificationResult(
     userId: string,
     embedding: number[],
-    verified: boolean,
+    _verified: boolean,
     confidence: number,
     idNumber?: string | null
-  ): Promise<void> {
+  ): Promise<KycDecision> {
     // Validate embedding before storing
     if (!Array.isArray(embedding) || embedding.length !== 512) {
       throw new Error('Invalid face embedding: expected 512-dimensional array');
@@ -251,6 +264,10 @@ export const faceVerificationService = {
     // Validate embedding values — reject NaN/Infinity before JSON serialization
     if (embedding.some(v => !Number.isFinite(v))) {
       throw new Error('Invalid face embedding: contains NaN or Infinity values');
+    }
+
+    if (!Number.isFinite(confidence)) {
+      throw new Error('Invalid confidence score');
     }
 
     // Guard against duplicate ID card registrations.
@@ -273,29 +290,51 @@ export const faceVerificationService = {
       }
     }
 
-    // Store embedding as JSON string (pgvector ALTER can be applied in production separately)
+    const decision = decideKycFromConfidence(confidence);
+    const isApproved      = decision.status === KYC_STATUS.APPROVED;
+    const isManualReview  = decision.status === KYC_STATUS.MANUAL_REVIEW;
+
+    // faceVerificationStatus stays PENDING in the manual-review band so the
+    // user is not surfaced as "VERIFIED" until an admin signs off.
+    const faceVerificationStatus =
+      isApproved ? 'VERIFIED' : isManualReview ? 'PENDING' : 'FAILED';
+
+    const failureReason =
+      isApproved      ? null
+      : isManualReview ? `Manual review required - confidence ${confidence.toFixed(3)} in [0.20, 0.50)`
+                       : `Face mismatch - confidence ${confidence.toFixed(3)} below 0.20`;
+
     await prisma.user.update({
       where: { id: userId },
       data: {
         faceEmbedding:          JSON.stringify(embedding),
-        faceVerificationStatus: verified ? 'VERIFIED' : 'FAILED',
-        faceVerifiedAt:         verified ? new Date() : null,
+        faceVerificationStatus,
+        faceVerifiedAt:         isApproved ? new Date() : null,
         faceConfidenceScore:    confidence,
-        kycStatus:              verified ? 'APPROVED' : 'REJECTED',
+        kycStatus:              decision.status,
+        // Route mid-confidence cases into the admin moderation queue
+        ...(isManualReview ? { flagged: true } : {}),
         ...(idNumber ? { idDocumentNumber: idNumber } : {}),
       },
     });
 
-    // Create FaceScan audit record
+    // Create FaceScan audit record. `verified` reflects the auto-approval
+    // outcome only — manual-review and rejected cases both record verified=false.
     await prisma.faceScan.create({
       data: {
         userId,
         scanType: 'VERIFICATION',
         score: confidence,
-        verified,
+        verified: isApproved,
         confidenceScore: confidence,
-        failureReason: verified ? null : 'Face mismatch - confidence too low',
+        failureReason,
       },
     });
+
+    logger.info(
+      `[KYC] user=${userId} confidence=${confidence.toFixed(3)} → ${decision.tier} (${decision.status})`
+    );
+
+    return decision;
   },
 };

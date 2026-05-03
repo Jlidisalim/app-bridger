@@ -139,7 +139,8 @@ router.post(
       // Save verification result + extracted ID number to database.
       // saveVerificationResult throws a 409 error (DUPLICATE_ID_DOCUMENT) if
       // another user is already registered with the same ID card number.
-      await faceVerificationService.saveVerificationResult(
+      // Returns the tiered KYC decision (APPROVED / MANUAL_REVIEW / REJECTED).
+      const decision = await faceVerificationService.saveVerificationResult(
         req.user!.id,
         face_embedding,
         result.verified,
@@ -147,7 +148,11 @@ router.post(
         id_number || null
       );
 
-      return res.json(result);
+      return res.json({
+        ...result,
+        kycStatus: decision.status,
+        tier:      decision.tier,
+      });
     } catch (error: any) {
       // Duplicate ID document — another account already uses this ID card.
       // Return 409 with a structured payload so the mobile client can show
