@@ -1,12 +1,63 @@
 /**
  * Centralised Axios instance for all API calls.
- * - Attaches JWT Bearer token to every request from localStorage.
- * - On 401 response: attempts a single token refresh; on failure clears
- *   auth state and redirects to /login.
+ * - Attaches JWT Bearer token to every request, sourced from either the
+ *   standalone `accessToken` key OR the persisted Zustand store
+ *   (`bridger-admin-auth`). This avoids 401s when one storage location has
+ *   drifted from the other.
+ * - On 401: attempts a single token refresh; updates BOTH storage locations
+ *   on success. On failure clears all auth state and redirects to /login.
  */
 import axios from 'axios'
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
+const PERSIST_KEY = 'bridger-admin-auth'
+
+// Read tokens from whichever location has them — keeps api.js working even if
+// localStorage and the Zustand persist blob have fallen out of sync.
+function readTokens() {
+  let accessToken  = localStorage.getItem('accessToken')  || null
+  let refreshToken = localStorage.getItem('refreshToken') || null
+
+  if (!accessToken || !refreshToken) {
+    try {
+      const raw = localStorage.getItem(PERSIST_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        const s = parsed?.state || {}
+        accessToken  = accessToken  || s.accessToken  || null
+        refreshToken = refreshToken || s.refreshToken || null
+      }
+    } catch { /* corrupt persist blob — ignore */ }
+  }
+
+  return { accessToken, refreshToken }
+}
+
+// Write fresh tokens to both locations so subsequent reads stay consistent
+// regardless of which key the consumer reaches for.
+function writeTokens({ accessToken, refreshToken }) {
+  if (accessToken)  localStorage.setItem('accessToken',  accessToken)
+  if (refreshToken) localStorage.setItem('refreshToken', refreshToken)
+
+  try {
+    const raw = localStorage.getItem(PERSIST_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      parsed.state = {
+        ...(parsed.state || {}),
+        accessToken:  accessToken  || parsed.state?.accessToken  || null,
+        refreshToken: refreshToken || parsed.state?.refreshToken || null,
+      }
+      localStorage.setItem(PERSIST_KEY, JSON.stringify(parsed))
+    }
+  } catch { /* ignore */ }
+}
+
+function clearAuth() {
+  localStorage.removeItem('accessToken')
+  localStorage.removeItem('refreshToken')
+  localStorage.removeItem(PERSIST_KEY)
+}
 
 export const api = axios.create({
   baseURL: BASE_URL,
@@ -15,8 +66,8 @@ export const api = axios.create({
 
 // ── Request interceptor — attach access token ─────────────────────────────
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('accessToken')
-  if (token) config.headers.Authorization = `Bearer ${token}`
+  const { accessToken } = readTokens()
+  if (accessToken) config.headers.Authorization = `Bearer ${accessToken}`
   return config
 })
 
@@ -26,15 +77,14 @@ api.interceptors.response.use(
   async (error) => {
     const original = error.config
 
-    if (error.response?.status === 401 && !original._retry) {
+    if (error.response?.status === 401 && original && !original._retry) {
       original._retry = true
-      const refreshToken = localStorage.getItem('refreshToken')
+      const { refreshToken } = readTokens()
 
       if (refreshToken) {
         try {
           const { data } = await axios.post(`${BASE_URL}/auth/refresh`, { refreshToken })
-          localStorage.setItem('accessToken', data.accessToken)
-          localStorage.setItem('refreshToken', data.refreshToken)
+          writeTokens({ accessToken: data.accessToken, refreshToken: data.refreshToken })
           original.headers.Authorization = `Bearer ${data.accessToken}`
           return api(original) // retry original request with new token
         } catch (_) {
@@ -42,11 +92,10 @@ api.interceptors.response.use(
         }
       }
 
-      // Clear stored auth and send to login
-      localStorage.removeItem('accessToken')
-      localStorage.removeItem('refreshToken')
-      localStorage.removeItem('bridger-admin-auth') // zustand persist key
-      window.location.href = '/login'
+      clearAuth()
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login'
+      }
     }
 
     return Promise.reject(error)

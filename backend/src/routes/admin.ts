@@ -775,4 +775,105 @@ router.patch('/users/:id/unflag', async (req: Request, res: Response, next: Next
   } catch (err) { next(err); }
 });
 
+/**
+ * GET /admin/users/:id/kyc-documents
+ * Returns the user profile and all KYC documents on file.
+ * Shape consumed by espace-admin's UserKycPreview page:
+ *   { user: {...full profile...}, documents: [{ id, documentType, frontUrl, backUrl, status, createdAt }, ...] }
+ */
+router.get('/users/:id/kyc-documents', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.params.id },
+      select: {
+        id: true, phone: true, name: true, avatar: true, email: true,
+        idDocumentNumber: true, kycStatus: true,
+        faceVerificationStatus: true, faceConfidenceScore: true, faceVerifiedAt: true,
+        banned: true, flagged: true, reasonForBan: true,
+        isAdmin: true, walletBalance: true, rating: true, totalDeals: true,
+        lastLoginAt: true, createdAt: true, updatedAt: true,
+      },
+    });
+
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const documents = await prisma.kycDocument.findMany({
+      where: { userId: req.params.id },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true, documentType: true, frontUrl: true, backUrl: true,
+        status: true, createdAt: true, updatedAt: true,
+      },
+    });
+
+    res.json({ user, documents });
+  } catch (err) { next(err); }
+});
+
+/**
+ * PATCH /admin/users/:id/kyc — { status: 'APPROVED' | 'REJECTED', documentId?: string }
+ * - With documentId: updates that one KycDocument's status.
+ * - Without documentId: applies the decision to every document for the user
+ *   AND updates User.kycStatus so the user's overall verification state moves.
+ */
+router.patch('/users/:id/kyc', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { status, documentId } = req.body || {};
+    if (!['APPROVED', 'REJECTED'].includes(status)) {
+      return res.status(400).json({ error: 'status must be APPROVED or REJECTED' });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.params.id },
+      select: { id: true },
+    });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    if (documentId) {
+      const doc = await prisma.kycDocument.update({
+        where: { id: documentId },
+        data: { status },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          userId: (req as any).user?.id,
+          entityId: doc.id,
+          entityType: 'USER',
+          action: status === 'APPROVED' ? 'KYC_DOC_APPROVE' : 'KYC_DOC_REJECT',
+          ipAddress: req.ip,
+          metadata: JSON.stringify({ targetUserId: user.id, documentId }),
+        },
+      }).catch(() => {});
+
+      return res.json({ document: doc });
+    }
+
+    const [, updatedUser] = await prisma.$transaction([
+      prisma.kycDocument.updateMany({
+        where: { userId: user.id },
+        data: { status },
+      }),
+      prisma.user.update({
+        where: { id: user.id },
+        data: { kycStatus: status } as any,
+        select: { id: true, kycStatus: true },
+      }),
+    ]);
+
+    await prisma.auditLog.create({
+      data: {
+        userId: (req as any).user?.id,
+        entityId: user.id,
+        entityType: 'USER',
+        action: status === 'APPROVED' ? 'KYC_APPROVE' : 'KYC_REJECT',
+        ipAddress: req.ip,
+      },
+    }).catch(() => {});
+
+    logger.info(`[Admin] KYC ${status} for user ${user.id} by ${(req as any).user?.id}`);
+    res.json({ user: updatedUser });
+  } catch (err) { next(err); }
+});
+
 export default router;

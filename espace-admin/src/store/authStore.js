@@ -49,7 +49,9 @@ export const useAuthStore = create(
 
       /** POST /auth/logout — deletes the session server-side */
       logout: async () => {
-        const token = get().accessToken
+        // Prefer the freshest token: localStorage may have been refreshed by api.js
+        // after this store last persisted, so read it first and fall back to state.
+        const token = localStorage.getItem('accessToken') || get().accessToken
         if (token) {
           try {
             await axios.post(
@@ -62,6 +64,7 @@ export const useAuthStore = create(
 
         localStorage.removeItem('accessToken')
         localStorage.removeItem('refreshToken')
+        localStorage.removeItem('bridger-admin-auth')
 
         set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false })
       },
