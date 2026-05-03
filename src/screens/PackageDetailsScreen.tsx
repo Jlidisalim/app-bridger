@@ -20,6 +20,8 @@ import {
     Smartphone,
     Box,
     Gift,
+    Watch,
+    Package,
     Camera as CameraIcon,
     X,
     Plus,
@@ -125,6 +127,8 @@ export const PackageDetailsScreen: React.FC<PackageDetailsScreenProps> = ({ onNe
         { id: 'Electronics',  icon: Smartphone,  color: '#8B5CF6' },
         { id: 'Small Parcel', icon: Box,         color: '#F59E0B' },
         { id: 'Gift',         icon: Gift,        color: '#EC4899' },
+        { id: 'Accessories',  icon: Watch,       color: '#10B981' },
+        { id: 'Others',       icon: Package,     color: '#6B7280' },
     ];
 
     const parsedItemValue = itemValue.trim() !== '' ? parseFloat(itemValue) : undefined;

@@ -54,7 +54,13 @@ export const getSuggestedPriceRange = (params: {
     case 'Gift':
       categoryFactor = 1.1;
       break;
+    case 'Accessories':
+      categoryFactor = 1.1;
+      break;
     case 'Small Parcel':
+      categoryFactor = 1.0;
+      break;
+    case 'Others':
       categoryFactor = 1.0;
       break;
   }

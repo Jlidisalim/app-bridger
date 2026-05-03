@@ -12,8 +12,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACING, RADIUS } from '../theme/theme';
 import { Typography } from '../components/Typography';
 import { Button } from '../components/Button';
-import { ArrowLeft, ArrowRight, FileText, Package, Lock } from 'lucide-react-native';
+import { ArrowLeft, ArrowRight, FileText, Smartphone, Box, Gift, Watch, Package, Lock, Check } from 'lucide-react-native';
 import { useAppStore } from '../store/useAppStore';
+import { PackageCategory } from '../types';
 
 interface CapacityScreenProps {
     onNext: (capacity: any) => void;
@@ -24,9 +25,24 @@ export const CapacityScreen: React.FC<CapacityScreenProps> = ({ onNext, onBack }
     const travelerCapacity = useAppStore((s) => s.travelerCapacity);
     const travelerPackageTypes = useAppStore((s) => s.travelerPackageTypes);
     const travelerDescription = useAppStore((s) => s.travelerDescription);
-    const [selectedType, setSelectedType] = useState<'documents' | 'parcels'>(
-        travelerPackageTypes.includes('Documents') ? 'documents' : travelerPackageTypes.includes('Small Parcel') ? 'parcels' : 'documents'
+    const [selectedTypes, setSelectedTypes] = useState<PackageCategory[]>(
+        travelerPackageTypes.length > 0 ? travelerPackageTypes : ['Documents']
     );
+
+    const categories: { id: PackageCategory; icon: any; color: string }[] = [
+        { id: 'Documents',    icon: FileText,    color: '#3B82F6' },
+        { id: 'Electronics',  icon: Smartphone,  color: '#8B5CF6' },
+        { id: 'Small Parcel', icon: Box,         color: '#F59E0B' },
+        { id: 'Gift',         icon: Gift,        color: '#EC4899' },
+        { id: 'Accessories',  icon: Watch,       color: '#10B981' },
+        { id: 'Others',       icon: Package,     color: '#6B7280' },
+    ];
+
+    const toggleType = (id: PackageCategory) => {
+        setSelectedTypes((prev) =>
+            prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]
+        );
+    };
     const minWeight = 0.1;
     const maxWeight = 1.0;
     const initialWeight = Math.min(maxWeight, Math.max(minWeight, travelerCapacity || 0.5));
@@ -139,45 +155,54 @@ export const CapacityScreen: React.FC<CapacityScreenProps> = ({ onNext, onBack }
                     </View>
                 </View>
 
-                {/* Item Types Row */}
-                <View style={styles.typesRow}>
-                    <TouchableOpacity
-                        style={[
-                            styles.typeCard,
-                            selectedType === 'documents' && styles.typeCardSelected
-                        ]}
-                        onPress={() => setSelectedType('documents')}
-                    >
-                        <FileText
-                            color={selectedType === 'documents' ? '#1E3B8A' : COLORS.background.slate[400]}
-                            size={28}
-                            style={styles.typeIcon}
-                            fill={selectedType === 'documents' ? '#1E3B8A' : 'transparent'}
-                        />
-                        <Typography size="sm" weight="bold" color="#0F172A">Documents</Typography>
-                        <Typography size="xs" color={COLORS.background.slate[500]} style={{ marginTop: 4 }}>
-                            Up to 0.2kg
-                        </Typography>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                        style={[
-                            styles.typeCard,
-                            selectedType === 'parcels' && styles.typeCardSelected
-                        ]}
-                        onPress={() => setSelectedType('parcels')}
-                    >
-                        <Package
-                            color={selectedType === 'parcels' ? '#1E3B8A' : COLORS.background.slate[400]}
-                            size={28}
-                            style={styles.typeIcon}
-                            fill={selectedType === 'parcels' ? '#1E3B8A' : 'transparent'}
-                        />
-                        <Typography size="sm" weight="bold" color="#0F172A">Small Parcels</Typography>
-                        <Typography size="xs" color={COLORS.background.slate[500]} style={{ marginTop: 4 }}>
-                            Up to 1.0kg
-                        </Typography>
-                    </TouchableOpacity>
+                {/* Accepted Package Types */}
+                <View style={{ paddingHorizontal: SPACING.xl, marginBottom: SPACING.xl }}>
+                    <Typography size="base" weight="bold" color="#0F172A" style={{ marginBottom: 6 }}>
+                        Accepted Package Types
+                    </Typography>
+                    <Typography size="xs" color={COLORS.background.slate[500]} style={{ marginBottom: 12, lineHeight: 16 }}>
+                        Select all the categories you're willing to carry.
+                    </Typography>
+                    <View style={styles.categoryGrid}>
+                        {categories.map((item) => {
+                            const isSelected = selectedTypes.includes(item.id);
+                            return (
+                                <TouchableOpacity
+                                    key={item.id}
+                                    activeOpacity={0.8}
+                                    onPress={() => toggleType(item.id)}
+                                    style={[
+                                        styles.categoryCard,
+                                        isSelected && { backgroundColor: item.color, borderColor: item.color },
+                                    ]}
+                                >
+                                    {isSelected && (
+                                        <View style={styles.checkBadge}>
+                                            <Check color={COLORS.white} size={10} strokeWidth={3} />
+                                        </View>
+                                    )}
+                                    <View style={[
+                                        styles.categoryIconCircle,
+                                        isSelected && { backgroundColor: 'rgba(255,255,255,0.2)' },
+                                        !isSelected && { backgroundColor: item.color + '18' },
+                                    ]}>
+                                        <item.icon
+                                            color={isSelected ? COLORS.white : item.color}
+                                            size={24}
+                                        />
+                                    </View>
+                                    <Typography
+                                        size="sm"
+                                        weight="bold"
+                                        color={isSelected ? COLORS.white : COLORS.background.slate[700]}
+                                        style={{ marginTop: 8 }}
+                                    >
+                                        {item.id}
+                                    </Typography>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
                 </View>
 
                 {/* Description Card */}
@@ -232,7 +257,8 @@ export const CapacityScreen: React.FC<CapacityScreenProps> = ({ onNext, onBack }
                     />
                     <Button
                         label="Continue"
-                        onPress={() => onNext({ weight, type: selectedType, description: description.trim() })}
+                        disabled={selectedTypes.length === 0}
+                        onPress={() => onNext({ weight, types: selectedTypes, description: description.trim() })}
                         style={styles.nextCta}
                         icon={<ArrowRight color={COLORS.white} size={20} />}
                         iconPosition="right"
@@ -358,32 +384,44 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         marginTop: 16,
     },
-    typesRow: {
+    categoryGrid: {
         flexDirection: 'row',
-        paddingHorizontal: SPACING.xl,
-        gap: 16,
-        marginBottom: SPACING.xl,
+        flexWrap: 'wrap',
+        gap: 12,
     },
-    typeCard: {
-        flex: 1,
+    categoryCard: {
+        width: '31%',
         backgroundColor: COLORS.white,
-        borderRadius: 20,
-        padding: 24,
+        borderRadius: 16,
+        paddingVertical: 16,
+        paddingHorizontal: 8,
         alignItems: 'center',
         borderWidth: 1,
         borderColor: COLORS.background.slate[200],
+        position: 'relative',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.02,
         shadowRadius: 8,
         elevation: 1,
     },
-    typeCardSelected: {
-        borderColor: '#1E3B8A',
-        borderWidth: 1.5,
+    categoryIconCircle: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
-    typeIcon: {
-        marginBottom: 16,
+    checkBadge: {
+        position: 'absolute',
+        top: 6,
+        right: 6,
+        width: 16,
+        height: 16,
+        borderRadius: 8,
+        backgroundColor: 'rgba(255,255,255,0.25)',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     descriptionCard: {
         backgroundColor: COLORS.white,

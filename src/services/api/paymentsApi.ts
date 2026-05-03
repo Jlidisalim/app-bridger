@@ -6,16 +6,6 @@ export interface BalanceData {
   pendingBalance?: number;
 }
 
-export interface DepositPayload {
-  card?: {
-    number: string;
-    expiry: string;
-    cvv: string;
-    holder: string;
-  };
-  phone?: string;
-}
-
 export interface D17InitData {
   sessionId: string;
 }
@@ -37,15 +27,9 @@ export const paymentsApi = {
 
   deposit: async (
     amount: number,
-    method: 'card' | 'd17' | 'flouci',
-    payload: DepositPayload
-  ): Promise<{ success: boolean; error?: string }> => {
+  ): Promise<{ success: boolean; data?: { clientSecret: string }; error?: string }> => {
     try {
-      const response = await apiClient.post<{ transactionId: string }>('/payments/deposit', {
-        amount,
-        method,
-        ...payload,
-      });
+      const response = await apiClient.post<{ clientSecret: string }>('/wallet/deposit', { amount });
       return response;
     } catch (e: any) {
       return { success: false, error: e?.message || 'Deposit failed' };

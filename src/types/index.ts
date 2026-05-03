@@ -19,7 +19,13 @@ export interface User {
 }
 
 // --- Package Types ---
-export type PackageCategory = 'Documents' | 'Electronics' | 'Small Parcel' | 'Gift';
+export type PackageCategory =
+  | 'Documents'
+  | 'Electronics'
+  | 'Small Parcel'
+  | 'Gift'
+  | 'Accessories'
+  | 'Others';
 
 export type PackageSize = 'SMALL' | 'MEDIUM' | 'LARGE' | 'EXTRA_LARGE';
 

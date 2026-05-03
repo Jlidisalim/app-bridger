@@ -5,6 +5,8 @@ import { NavigationContainer, NavigationContainerRef } from '@react-navigation/n
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import * as SplashScreenExpo from 'expo-splash-screen';
 import * as SecureStore from 'expo-secure-store';
+import Constants from 'expo-constants';
+import { StripeProvider } from '@stripe/stripe-react-native';
 
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
@@ -14,6 +16,9 @@ import { apiClient, setSessionExpiredHandler } from './src/services/api/client';
 import { pushNotificationService, setupPushTokenRefresh } from './src/services/notifications/pushNotificationService';
 import { notificationsApi } from './src/services/api';
 import { useSocket } from './src/hooks/useSocket';
+
+const stripePublishableKey =
+  (Constants.expoConfig?.extra as any)?.stripePublishableKey ?? '';
 
 SplashScreenExpo.preventAutoHideAsync();
 
@@ -187,11 +192,13 @@ function App(): React.JSX.Element {
 
   return (
     <ErrorBoundary>
-      <SafeAreaProvider>
-        <NavigationContainer ref={navigationRef}>
-          <RootNavigator />
-        </NavigationContainer>
-      </SafeAreaProvider>
+      <StripeProvider publishableKey={stripePublishableKey}>
+        <SafeAreaProvider>
+          <NavigationContainer ref={navigationRef}>
+            <RootNavigator />
+          </NavigationContainer>
+        </SafeAreaProvider>
+      </StripeProvider>
     </ErrorBoundary>
   );
 }

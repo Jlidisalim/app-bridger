@@ -194,7 +194,7 @@ const CapacityWrapper = ({ navigation }: any) => {
     <CapacityScreen
       onNext={(data) => {
         setTravelerCapacity(data.weight);
-        setTravelerPackageTypes([data.type === 'documents' ? 'Documents' : 'Small Parcel']);
+        setTravelerPackageTypes(data.types);
         setTravelerDescription(data.description || '');
         navigation.navigate('TravelerPricing');
       }}

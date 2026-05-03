@@ -297,16 +297,12 @@ export const paymentsApi = {
     return apiClient.get(`/wallet/transactions${query}`);
   },
 
-  // Deposit funds — supports card / d17 / flouci
+  // Deposit funds — backend creates a Stripe PaymentIntent and returns its clientSecret.
+  // The mobile then presents Stripe's PaymentSheet to actually charge the card.
   deposit: async (
     amount: number,
-    method: 'card' | 'd17' | 'flouci',
-    details: {
-      card?: { number: string; expiry: string; cvv: string; holder: string };
-      phone?: string;   // D17 or Flouci phone
-    }
-  ): Promise<ApiResponse<{ transactionId: string; paymentUrl?: string }>> => {
-    return apiClient.post('/wallet/deposit', { amount, method, ...details });
+  ): Promise<ApiResponse<{ clientSecret: string }>> => {
+    return apiClient.post('/wallet/deposit', { amount });
   },
 
   // Initiate Flouci payment — backend creates payment session and returns redirect URL

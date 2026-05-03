@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     View,
     StyleSheet,
@@ -12,6 +12,7 @@ import {
     Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
+import { useStripe } from '@stripe/stripe-react-native';
 import { COLORS, SPACING, RADIUS } from '../theme/theme';
 import { Typography } from '../components/Typography';
 import { useNavigation } from '@react-navigation/native';
@@ -22,8 +23,6 @@ import {
     WalletMinimal,
     ChevronRight,
     CircleCheck,
-    Eye,
-    EyeOff,
     X,
     RefreshCw,
     Lock,
@@ -37,71 +36,9 @@ import { useUserCurrency } from '../utils/currency';
 // ─────────────────────────────────────────────
 
 type Method = 'card' | 'd17' | 'flouci';
-type Step = 'amount' | 'method' | 'details' | 'otp' | 'webview' | 'confirm';
-
-interface CardDetails {
-    number: string;
-    expiry: string;
-    cvv: string;
-    holder: string;
-}
+type Step = 'amount' | 'method' | 'details' | 'otp' | 'webview';
 
 const QUICK_AMOUNTS = [25, 50, 100, 250, 500];
-
-// ─────────────────────────────────────────────
-// Card helpers
-// ─────────────────────────────────────────────
-
-type CardType = 'visa' | 'mastercard' | 'amex' | 'unknown';
-
-function detectCardType(num: string): CardType {
-    const n = num.replace(/\s/g, '');
-    if (/^4/.test(n)) return 'visa';
-    if (/^(5[1-5]|2[2-7])/.test(n)) return 'mastercard';
-    if (/^3[47]/.test(n)) return 'amex';
-    return 'unknown';
-}
-
-function formatCardNumber(value: string): string {
-    const digits = value.replace(/\D/g, '');
-    const type = detectCardType(digits);
-    // Amex: 4-6-5 groups
-    if (type === 'amex') {
-        const parts = [digits.slice(0, 4), digits.slice(4, 10), digits.slice(10, 15)];
-        return parts.filter(Boolean).join(' ');
-    }
-    // Others: 4-4-4-4
-    return digits.replace(/(.{4})/g, '$1 ').trim();
-}
-
-function formatExpiry(value: string): string {
-    const digits = value.replace(/\D/g, '');
-    if (digits.length <= 2) return digits;
-    return `${digits.slice(0, 2)}/${digits.slice(2, 4)}`;
-}
-
-function maskCardNumber(num: string): string {
-    const digits = num.replace(/\s/g, '');
-    if (digits.length < 4) return num;
-    return `•••• •••• •••• ${digits.slice(-4)}`;
-}
-
-function validateCard(card: CardDetails): string | null {
-    const digits = card.number.replace(/\s/g, '');
-    if (digits.length < 13) return 'Card number is too short';
-    if (!card.expiry.includes('/')) return 'Invalid expiry date';
-    const [mm, yy] = card.expiry.split('/');
-    const month = parseInt(mm, 10);
-    const year = parseInt(`20${yy}`, 10);
-    const now = new Date();
-    if (month < 1 || month > 12) return 'Invalid expiry month';
-    if (year < now.getFullYear() || (year === now.getFullYear() && month < now.getMonth() + 1)) {
-        return 'Your card has expired';
-    }
-    if (card.cvv.length < 3) return 'CVV is too short';
-    if (!card.holder.trim()) return 'Cardholder name is required';
-    return null;
-}
 
 // Tunisian phone format
 function formatTunisianPhone(value: string): string {
@@ -113,43 +50,6 @@ function formatTunisianPhone(value: string): string {
 }
 
 // ─────────────────────────────────────────────
-// Card Type Badge
-// ─────────────────────────────────────────────
-
-const CardTypeBadge: React.FC<{ type: CardType }> = ({ type }) => {
-    if (type === 'visa') return (
-        <View style={[badge.wrap, { backgroundColor: '#1a1f71' }]}>
-            <Typography style={badge.text} color="#fff">VISA</Typography>
-        </View>
-    );
-    if (type === 'mastercard') return (
-        <View style={badge.mcWrap}>
-            <View style={[badge.mcCircle, { backgroundColor: '#eb001b', left: 0 }]} />
-            <View style={[badge.mcCircle, { backgroundColor: '#f79e1b', right: 0 }]} />
-        </View>
-    );
-    if (type === 'amex') return (
-        <View style={[badge.wrap, { backgroundColor: '#007bc1' }]}>
-            <Typography style={badge.text} color="#fff">AMEX</Typography>
-        </View>
-    );
-    return null;
-};
-
-const badge = StyleSheet.create({
-    wrap: { borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
-    text: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
-    mcWrap: { width: 38, height: 24, position: 'relative' },
-    mcCircle: {
-        width: 24, height: 24,
-        borderRadius: 12,
-        position: 'absolute',
-        top: 0,
-        opacity: 0.9,
-    },
-});
-
-// ─────────────────────────────────────────────
 // Main Screen
 // ─────────────────────────────────────────────
 
@@ -157,17 +57,13 @@ export const DepositScreen: React.FC = () => {
     const navigation = useNavigation();
     const { fetchWalletBalance } = useAppStore();
     const currency = useUserCurrency();
+    const { initPaymentSheet, presentPaymentSheet } = useStripe();
 
     const [step, setStep] = useState<Step>('amount');
     const [amount, setAmount] = useState('');
     const [method, setMethod] = useState<Method | null>(null);
     const [loading, setLoading] = useState(false);
     const [balance, setBalance] = useState(0);
-
-    // Card state
-    const [card, setCard] = useState<CardDetails>({ number: '', expiry: '', cvv: '', holder: '' });
-    const [showCvv, setShowCvv] = useState(false);
-    const cardType = detectCardType(card.number);
 
     // D17 state
     const [d17Phone, setD17Phone] = useState('');
@@ -180,10 +76,6 @@ export const DepositScreen: React.FC = () => {
     const [flouciPaymentId, setFlouciPaymentId] = useState('');
 
     const parsedAmount = parseFloat(amount) || 0;
-
-    const expiryRef = useRef<TextInput>(null);
-    const cvvRef = useRef<TextInput>(null);
-    const holderRef = useRef<TextInput>(null);
 
     useEffect(() => {
         paymentsApi.getBalance().then((res) => {
@@ -203,7 +95,7 @@ export const DepositScreen: React.FC = () => {
             return false;
         }
         return true;
-    }, [parsedAmount]);
+    }, [parsedAmount, currency.code]);
 
     // ── Step navigation ──────────────────────
 
@@ -212,12 +104,11 @@ export const DepositScreen: React.FC = () => {
         else if (step === 'details') setStep('method');
         else if (step === 'otp') setStep('details');
         else if (step === 'webview') setStep('details');
-        else if (step === 'confirm') setStep('details');
         else navigation.goBack();
     };
 
     const stepProgress: Record<Step, number> = {
-        amount: 20, method: 40, details: 65, otp: 80, webview: 80, confirm: 100,
+        amount: 25, method: 50, details: 75, otp: 90, webview: 90,
     };
 
     // ── Handlers ────────────────────────────
@@ -229,14 +120,47 @@ export const DepositScreen: React.FC = () => {
 
     const handleMethodSelect = (m: Method) => {
         setMethod(m);
-        setStep('details');
+        if (m === 'card') {
+            handleCardPayment();
+        } else {
+            setStep('details');
+        }
     };
 
-    // Card submit → straight to confirm
-    const handleCardNext = () => {
-        const err = validateCard(card);
-        if (err) { Alert.alert('Invalid Card', err); return; }
-        setStep('confirm');
+    // Card → Stripe PaymentSheet
+    const handleCardPayment = async () => {
+        setLoading(true);
+        try {
+            const res = await paymentsApi.deposit(parsedAmount);
+            if (!res.success || !res.data?.clientSecret) {
+                Alert.alert('Payment Error', res.error || 'Could not start the payment.');
+                return;
+            }
+
+            const init = await initPaymentSheet({
+                merchantDisplayName: 'Bridger',
+                paymentIntentClientSecret: res.data.clientSecret,
+                allowsDelayedPaymentMethods: false,
+            });
+            if (init.error) {
+                Alert.alert('Payment Error', init.error.message);
+                return;
+            }
+
+            const result = await presentPaymentSheet();
+            if (result.error) {
+                if (result.error.code !== 'Canceled') {
+                    Alert.alert('Payment Failed', result.error.message);
+                }
+                return;
+            }
+
+            await onPaymentSuccess();
+        } catch (e: any) {
+            Alert.alert('Error', e.message || 'Something went wrong');
+        } finally {
+            setLoading(false);
+        }
     };
 
     // D17 → request OTP from backend
@@ -321,37 +245,14 @@ export const DepositScreen: React.FC = () => {
         }
     };
 
-    // Card final deposit
-    const handleCardDeposit = async () => {
-        setLoading(true);
-        try {
-            const res = await paymentsApi.deposit(parsedAmount, 'card', {
-                card: {
-                    number: card.number.replace(/\s/g, ''),
-                    expiry: card.expiry,
-                    cvv: card.cvv,
-                    holder: card.holder.trim(),
-                },
-            });
-            if (res.success) {
-                await onPaymentSuccess();
-            } else {
-                Alert.alert('Payment Failed', res.error || 'Card was declined. Please try another card.');
-                setStep('details');
-            }
-        } catch (e: any) {
-            Alert.alert('Error', e.message || 'Something went wrong');
-            setStep('details');
-        } finally {
-            setLoading(false);
-        }
-    };
-
     const onPaymentSuccess = async () => {
+        // Backend webhook credits the wallet on payment_intent.succeeded.
+        // Refresh after a short delay to give Stripe time to deliver the webhook.
         await fetchWalletBalance();
+        setTimeout(() => { fetchWalletBalance(); }, 4000);
         Alert.alert(
-            'Deposit Successful! 🎉',
-            `${parsedAmount.toFixed(2)} ${currency.code} has been added to your wallet.`,
+            'Deposit Successful',
+            `${parsedAmount.toFixed(2)} ${currency.code} will be added to your wallet shortly.`,
             [{ text: 'Done', onPress: () => navigation.goBack() }]
         );
     };
@@ -429,9 +330,17 @@ export const DepositScreen: React.FC = () => {
             </Typography>
 
             {/* Credit / Debit Card */}
-            <TouchableOpacity style={styles.methodCard} onPress={() => handleMethodSelect('card')} activeOpacity={0.8}>
+            <TouchableOpacity
+                style={[styles.methodCard, loading && styles.primaryBtnDisabled]}
+                onPress={() => handleMethodSelect('card')}
+                activeOpacity={0.8}
+                disabled={loading}
+            >
                 <View style={[styles.methodIconBox, { backgroundColor: '#eef2ff' }]}>
-                    <CreditCard size={24} color="#4f46e5" />
+                    {loading
+                        ? <ActivityIndicator size="small" color="#4f46e5" />
+                        : <CreditCard size={24} color="#4f46e5" />
+                    }
                 </View>
                 <View style={styles.methodText}>
                     <Typography size="base" weight="bold" color={COLORS.background.slate[900]}>Credit / Debit Card</Typography>
@@ -441,7 +350,12 @@ export const DepositScreen: React.FC = () => {
             </TouchableOpacity>
 
             {/* D17 */}
-            <TouchableOpacity style={styles.methodCard} onPress={() => handleMethodSelect('d17')} activeOpacity={0.8}>
+            <TouchableOpacity
+                style={[styles.methodCard, loading && styles.primaryBtnDisabled]}
+                onPress={() => handleMethodSelect('d17')}
+                activeOpacity={0.8}
+                disabled={loading}
+            >
                 <View style={[styles.methodIconBox, { backgroundColor: '#fef3c7' }]}>
                     <Smartphone size={24} color="#d97706" />
                 </View>
@@ -458,7 +372,12 @@ export const DepositScreen: React.FC = () => {
             </TouchableOpacity>
 
             {/* Flouci */}
-            <TouchableOpacity style={styles.methodCard} onPress={() => handleMethodSelect('flouci')} activeOpacity={0.8}>
+            <TouchableOpacity
+                style={[styles.methodCard, loading && styles.primaryBtnDisabled]}
+                onPress={() => handleMethodSelect('flouci')}
+                activeOpacity={0.8}
+                disabled={loading}
+            >
                 <View style={[styles.methodIconBox, { backgroundColor: '#d1fae5' }]}>
                     <WalletMinimal size={24} color="#059669" />
                 </View>
@@ -480,143 +399,6 @@ export const DepositScreen: React.FC = () => {
                     Payments are encrypted and processed securely
                 </Typography>
             </View>
-        </>
-    );
-
-    const renderCardForm = () => (
-        <>
-            {/* Live Card Preview */}
-            <View style={styles.cardPreview}>
-                <View style={styles.cardPreviewCircle1} />
-                <View style={styles.cardPreviewCircle2} />
-                <View style={styles.cardPreviewTop}>
-                    <View style={styles.chip} />
-                    <CardTypeBadge type={cardType} />
-                </View>
-                <Typography style={styles.cardPreviewNumber} color="rgba(255,255,255,0.9)">
-                    {card.number ? maskCardNumber(card.number) : '•••• •••• •••• ••••'}
-                </Typography>
-                <View style={styles.cardPreviewBottom}>
-                    <View>
-                        <Typography size="xs" color="rgba(255,255,255,0.55)">CARDHOLDER</Typography>
-                        <Typography size="sm" weight="bold" color="rgba(255,255,255,0.9)">
-                            {card.holder.toUpperCase() || 'YOUR NAME'}
-                        </Typography>
-                    </View>
-                    <View>
-                        <Typography size="xs" color="rgba(255,255,255,0.55)">EXPIRES</Typography>
-                        <Typography size="sm" weight="bold" color="rgba(255,255,255,0.9)">
-                            {card.expiry || 'MM/YY'}
-                        </Typography>
-                    </View>
-                </View>
-            </View>
-
-            {/* Card Number */}
-            <View style={styles.inputGroup}>
-                <Typography size="xs" weight="bold" color={COLORS.background.slate[500]} style={styles.inputLabel}>
-                    CARD NUMBER
-                </Typography>
-                <View style={styles.inputBox}>
-                    <CreditCard size={18} color={COLORS.background.slate[400]} style={{ marginRight: 10 }} />
-                    <TextInput
-                        style={styles.textInput}
-                        value={card.number}
-                        onChangeText={(v) => {
-                            const fmt = formatCardNumber(v);
-                            const maxLen = detectCardType(v) === 'amex' ? 17 : 19;
-                            if (fmt.length <= maxLen) setCard(c => ({ ...c, number: fmt }));
-                            // Auto-advance when full
-                            const digits = fmt.replace(/\s/g, '');
-                            const maxDigits = detectCardType(v) === 'amex' ? 15 : 16;
-                            if (digits.length === maxDigits) expiryRef.current?.focus();
-                        }}
-                        placeholder="0000 0000 0000 0000"
-                        placeholderTextColor="#bfc5d0"
-                        keyboardType="number-pad"
-                        maxLength={19}
-                    />
-                </View>
-            </View>
-
-            {/* Expiry + CVV */}
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-                <View style={[styles.inputGroup, { flex: 1 }]}>
-                    <Typography size="xs" weight="bold" color={COLORS.background.slate[500]} style={styles.inputLabel}>
-                        EXPIRY DATE
-                    </Typography>
-                    <View style={styles.inputBox}>
-                        <TextInput
-                            ref={expiryRef}
-                            style={styles.textInput}
-                            value={card.expiry}
-                            onChangeText={(v) => {
-                                const fmt = formatExpiry(v);
-                                if (fmt.length <= 5) setCard(c => ({ ...c, expiry: fmt }));
-                                if (fmt.length === 5) cvvRef.current?.focus();
-                            }}
-                            placeholder="MM/YY"
-                            placeholderTextColor="#bfc5d0"
-                            keyboardType="number-pad"
-                            maxLength={5}
-                        />
-                    </View>
-                </View>
-
-                <View style={[styles.inputGroup, { flex: 1 }]}>
-                    <Typography size="xs" weight="bold" color={COLORS.background.slate[500]} style={styles.inputLabel}>
-                        CVV / CVC
-                    </Typography>
-                    <View style={styles.inputBox}>
-                        <TextInput
-                            ref={cvvRef}
-                            style={[styles.textInput, { flex: 1 }]}
-                            value={card.cvv}
-                            onChangeText={(v) => {
-                                const digits = v.replace(/\D/g, '');
-                                const max = cardType === 'amex' ? 4 : 3;
-                                if (digits.length <= max) setCard(c => ({ ...c, cvv: digits }));
-                                if (digits.length === max) holderRef.current?.focus();
-                            }}
-                            placeholder={cardType === 'amex' ? '4 digits' : '3 digits'}
-                            placeholderTextColor="#bfc5d0"
-                            keyboardType="number-pad"
-                            secureTextEntry={!showCvv}
-                            maxLength={cardType === 'amex' ? 4 : 3}
-                        />
-                        <TouchableOpacity onPress={() => setShowCvv(v => !v)} style={{ padding: 4 }}>
-                            {showCvv
-                                ? <EyeOff size={16} color={COLORS.background.slate[400]} />
-                                : <Eye size={16} color={COLORS.background.slate[400]} />
-                            }
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </View>
-
-            {/* Cardholder Name */}
-            <View style={styles.inputGroup}>
-                <Typography size="xs" weight="bold" color={COLORS.background.slate[500]} style={styles.inputLabel}>
-                    CARDHOLDER NAME
-                </Typography>
-                <View style={styles.inputBox}>
-                    <TextInput
-                        ref={holderRef}
-                        style={styles.textInput}
-                        value={card.holder}
-                        onChangeText={(v) => setCard(c => ({ ...c, holder: v }))}
-                        placeholder="Name as on card"
-                        placeholderTextColor="#bfc5d0"
-                        autoCapitalize="characters"
-                        autoCorrect={false}
-                    />
-                </View>
-            </View>
-
-            <TouchableOpacity style={styles.primaryBtn} onPress={handleCardNext} activeOpacity={0.85}>
-                <Typography size="md" weight="bold" color={COLORS.white}>Review Payment</Typography>
-                <ChevronRight size={18} color={COLORS.white} />
-            </TouchableOpacity>
         </>
     );
 
@@ -788,67 +570,12 @@ export const DepositScreen: React.FC = () => {
         </>
     );
 
-    const renderConfirm = () => (
-        <>
-            <View style={styles.confirmCard}>
-                <View style={styles.confirmCircle}>
-                    <CreditCard size={30} color={COLORS.primary} />
-                </View>
-                <Typography size="xs" weight="semibold" color={COLORS.background.slate[400]} style={{ letterSpacing: 1, marginTop: 16 }}>
-                    PAYMENT SUMMARY
-                </Typography>
-                <Typography style={styles.confirmAmount} weight="bold" color={COLORS.background.slate[900]}>
-                    {parsedAmount.toFixed(2)} {currency.code}
-                </Typography>
-
-                <View style={styles.confirmDivider} />
-
-                <View style={styles.confirmRow}>
-                    <Typography size="sm" color={COLORS.background.slate[500]}>Card</Typography>
-                    <Typography size="sm" weight="semibold">{maskCardNumber(card.number)}</Typography>
-                </View>
-                <View style={styles.confirmRow}>
-                    <Typography size="sm" color={COLORS.background.slate[500]}>Name</Typography>
-                    <Typography size="sm" weight="semibold">{card.holder}</Typography>
-                </View>
-                <View style={styles.confirmRow}>
-                    <Typography size="sm" color={COLORS.background.slate[500]}>Current Balance</Typography>
-                    <Typography size="sm" weight="semibold">{balance.toFixed(2)} {currency.code}</Typography>
-                </View>
-                <View style={styles.confirmRow}>
-                    <Typography size="sm" color={COLORS.background.slate[500]}>New Balance</Typography>
-                    <Typography size="sm" weight="bold" color={COLORS.primary}>{(balance + parsedAmount).toFixed(2)} {currency.code}</Typography>
-                </View>
-            </View>
-
-            <TouchableOpacity
-                style={[styles.primaryBtn, loading && styles.primaryBtnDisabled]}
-                onPress={handleCardDeposit}
-                disabled={loading}
-                activeOpacity={0.85}
-            >
-                {loading
-                    ? <ActivityIndicator size="small" color={COLORS.white} />
-                    : <>
-                        <Lock size={16} color={COLORS.white} />
-                        <Typography size="md" weight="bold" color={COLORS.white}>Pay Securely</Typography>
-                    </>
-                }
-            </TouchableOpacity>
-
-            <Typography size="xs" color={COLORS.background.slate[400]} style={styles.disclaimer}>
-                Your card details are encrypted. We never store raw card numbers.
-            </Typography>
-        </>
-    );
-
     const stepTitle: Record<Step, string> = {
         amount:  'Add Money',
         method:  'Payment Method',
-        details: method === 'card' ? 'Card Details' : method === 'd17' ? 'D17 Wallet' : 'Flouci',
+        details: method === 'd17' ? 'D17 Wallet' : 'Flouci',
         otp:     'Confirm Code',
         webview: 'Flouci Payment',
-        confirm: 'Confirm Payment',
     };
 
     // ─────────────────────────────────────────
@@ -903,11 +630,9 @@ export const DepositScreen: React.FC = () => {
                 >
                     {step === 'amount'  && renderAmountStep()}
                     {step === 'method'  && renderMethodStep()}
-                    {step === 'details' && method === 'card'   && renderCardForm()}
                     {step === 'details' && method === 'd17'    && renderD17Form()}
                     {step === 'details' && method === 'flouci' && renderFlouciForm()}
                     {step === 'otp'     && renderD17Otp()}
-                    {step === 'confirm' && renderConfirm()}
                     <View style={{ height: 40 }} />
                 </ScrollView>
             </KeyboardAvoidingView>
@@ -999,34 +724,6 @@ const styles = StyleSheet.create({
         justifyContent: 'center', marginTop: SPACING.lg,
     },
 
-    // ── Card form
-    cardPreview: {
-        backgroundColor: COLORS.primary, borderRadius: 20,
-        padding: SPACING.xl, marginBottom: SPACING.xl,
-        overflow: 'hidden',
-        shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.3, shadowRadius: 16, elevation: 8,
-    },
-    cardPreviewCircle1: {
-        position: 'absolute', width: 160, height: 160, borderRadius: 80,
-        backgroundColor: 'rgba(255,255,255,0.07)', top: -50, right: -30,
-    },
-    cardPreviewCircle2: {
-        position: 'absolute', width: 100, height: 100, borderRadius: 50,
-        backgroundColor: 'rgba(255,255,255,0.05)', bottom: -20, left: -10,
-    },
-    cardPreviewTop: {
-        flexDirection: 'row', justifyContent: 'space-between',
-        alignItems: 'center', marginBottom: SPACING.xl,
-    },
-    chip: {
-        width: 36, height: 26, borderRadius: 5,
-        backgroundColor: '#e6c870',
-        borderWidth: 1, borderColor: '#c9a84c',
-    },
-    cardPreviewNumber: { fontSize: 18, letterSpacing: 3, fontWeight: '600', marginBottom: SPACING.xl },
-    cardPreviewBottom: { flexDirection: 'row', justifyContent: 'space-between' },
-
     // ── Shared input
     inputGroup: { marginBottom: SPACING.lg },
     inputLabel: { letterSpacing: 0.8, marginBottom: SPACING.xs },
@@ -1057,29 +754,6 @@ const styles = StyleSheet.create({
         flexDirection: 'row', alignItems: 'center',
         justifyContent: 'center', marginTop: SPACING.lg,
     },
-
-    // ── Confirm card
-    confirmCard: {
-        backgroundColor: COLORS.white, borderRadius: 24, padding: SPACING.xl,
-        alignItems: 'center', marginBottom: SPACING.xl,
-        shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
-    },
-    confirmCircle: {
-        width: 68, height: 68, borderRadius: 34,
-        backgroundColor: `${COLORS.primary}15`,
-        alignItems: 'center', justifyContent: 'center',
-    },
-    confirmAmount: { fontSize: 42, marginTop: 6, marginBottom: 20 },
-    confirmDivider: {
-        height: 1, backgroundColor: COLORS.background.slate[100],
-        width: '100%', marginBottom: SPACING.lg,
-    },
-    confirmRow: {
-        flexDirection: 'row', justifyContent: 'space-between',
-        width: '100%', paddingVertical: 8,
-    },
-    disclaimer: { textAlign: 'center', marginTop: SPACING.lg, lineHeight: 18 },
 
     // ── Primary button
     primaryBtn: {
