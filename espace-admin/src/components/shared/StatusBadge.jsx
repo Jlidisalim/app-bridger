@@ -1,5 +1,8 @@
 const STATUS_MAP = {
   active:     { label: 'Active',     cls: 'bg-emerald-100 text-emerald-700' },
+  open:       { label: 'Open',       cls: 'bg-emerald-100 text-emerald-700' },
+  matched:    { label: 'Matched',    cls: 'bg-violet-100 text-violet-700' },
+  canceled:   { label: 'Canceled',   cls: 'bg-red-100 text-red-700' },
   pending:    { label: 'Pending',    cls: 'bg-amber-100 text-amber-700' },
   draft:      { label: 'Draft',      cls: 'bg-gray-100 text-gray-600' },
   cancelled:  { label: 'Cancelled',  cls: 'bg-red-100 text-red-700' },

@@ -1,0 +1,48 @@
+@startuml Sequence_Deal_Match
+skinparam sequenceArrowThickness 1.5
+skinparam participantBackgroundColor #F8FAFF
+skinparam participantBorderColor #1E3B8A
+
+actor Sender
+actor Traveler
+participant "App\nSender" as AS
+participant "App\nTraveler" as AT
+participant "Backend" as API
+participant "Stripe" as Stripe
+database "PostgreSQL" as DB
+participant "Socket.IO\n(rooms)" as WS
+participant "Push (FCM/APNs)" as Push
+
+== Publication ==
+Sender -> AS  : Remplit le wizard\n(Package, Route, Receiver, Pricing)
+AS -> API     : POST /ml/match {distance, weight, category, urgency}
+API --> AS    : {estimated_price, min, max}
+AS -> API     : POST /deals {title, fromCity, toCity, ...}
+API -> DB     : prisma.deal.create({status:"OPEN"})
+API --> AS    : 201 {deal}
+
+== Recherche par voyageur ==
+Traveler -> AT: Filtre par trajet
+AT -> API     : POST /deals/search
+API -> DB     : SELECT WHERE status="OPEN" AND fromCity AND toCity
+API --> AT    : [deals]
+
+== Appariement ==
+Traveler -> AT: Sélectionne un Deal
+AT -> API     : POST /deals/:id/match
+API -> API    : assertSenderCanAfford(senderId, price)
+API -> Stripe : paymentIntents.create({amount, capture:false})
+Stripe --> API: PaymentIntent {id, client_secret}
+API -> DB     : prisma.$transaction([\n  deal.update(status:"MATCHED", travelerId),\n  transaction.create(type:"ESCROW_HOLD"),\n  trackingEvent.create(),\n  chatRoom.create()\n])
+API -> WS     : emit("deal:matched", deal) → room deal:<id>
+API -> Push   : sendPushNotification(senderId, "Trajet trouvé")
+API --> AT    : 200 {deal, paymentIntent}
+
+== Confirmation paiement (escrow) ==
+AS -> Stripe  : confirmPayment(client_secret)
+Stripe --> API: webhook payment_intent.succeeded
+API -> DB     : transaction.update(status:"COMPLETED")
+API -> DB     : deal.update(status:"ESCROW_PAID")
+API -> WS     : emit("deal:escrow_paid")
+API -> Push   : "Paiement bloqué en séquestre"
+@enduml

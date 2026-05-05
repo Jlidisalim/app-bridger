@@ -1,0 +1,67 @@
+@startuml Layered_Architecture
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam backgroundColor #FFFFFF
+skinparam component {
+  BackgroundColor #F8FAFF
+  BorderColor #1E3B8A
+}
+
+package "Couche Présentation (HTTP)" #EAF2FB {
+  [Routes Express] as Routes
+  [Middlewares\n(helmet, cors, rate-limit)] as MW
+}
+
+package "Couche Validation" #F8FAFF {
+  [Schémas Zod] as Zod
+  note right of Zod : Validation déclarative\ndes entrées (body, query, params)
+}
+
+package "Couche Service (Logique métier)" #EAF2FB {
+  [escrowService] as Escrow
+  [otpService\n(Twilio Verify)] as OTP
+  [faceVerificationService\n(Circuit Breaker)] as Face
+  [qrService\n(HMAC-SHA256)] as QR
+  [pushService\n(FCM/APNs)] as Push
+  [paymentService\n(Stripe)] as Pay
+  [websocket\n(Socket.IO)] as WS
+}
+
+package "Couche Persistance" #F8FAFF {
+  [Prisma Client] as Prisma
+  database "PostgreSQL" as DB
+  database "Redis" as Cache
+}
+
+package "Services externes" #FFFAEC {
+  cloud "Twilio Verify API" as Twilio
+  cloud "Stripe API" as StripeAPI
+  cloud "Face IA\n(FastAPI)" as IA
+  cloud "OpenSky API" as OpenSky
+}
+
+Routes --> MW
+MW --> Zod
+Zod --> Escrow
+Zod --> OTP
+Zod --> Face
+Zod --> QR
+Zod --> Pay
+
+Escrow --> Prisma
+OTP    --> Prisma
+QR     --> Prisma
+Pay    --> Prisma
+Face   --> Prisma
+WS     --> Prisma
+
+Prisma --> DB
+OTP    --> Cache
+Escrow --> Cache
+
+OTP    --> Twilio
+Pay    --> StripeAPI
+Face   --> IA
+WS     --> OpenSky
+
+@enduml

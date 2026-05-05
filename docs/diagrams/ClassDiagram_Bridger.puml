@@ -1,0 +1,311 @@
+@startuml ClassDiagram_Bridger
+skinparam classAttributeIconSize 0
+skinparam classBackgroundColor #F8FAFF
+skinparam classBorderColor #1E3B8A
+skinparam packageStyle rectangle
+
+package "Identité & Authentification" {
+
+  class User {
+    - id : String <<PK>>
+    - phone : String <<unique>>
+    - name : String
+    - kycStatus : KycStatus = PENDING
+    - faceEmbedding : Vector<512>
+    - faceVerificationStatus : FaceStatus
+    - faceConfidenceScore : Float
+    - idDocumentNumber : String
+    - isAdmin : Boolean = false
+    - flagged : Boolean = false
+    - banned : Boolean = false
+    - walletBalance : Float = 0
+    - rating : Float = 0
+    - completionRate : Float = 0
+    - createdAt : DateTime
+    + login(phone) : Session
+    + verifyKyc() : void
+    + updateProfile(data) : User
+  }
+
+  class Session {
+    - id : String <<PK>>
+    - token : String <<unique>>
+    - refreshToken : String <<unique>>
+    - expiresAt : DateTime
+    + isExpired() : Boolean
+  }
+
+  class OTP {
+    - id : String <<PK>>
+    - phone : String
+    - code : String
+    - attempts : Int = 0
+    - verified : Boolean = false
+    - expiresAt : DateTime
+    + verify(code) : Boolean
+  }
+
+  class KycDocument {
+    - id : String <<PK>>
+    - documentType : DocumentType
+    - frontUrl : String
+    - backUrl : String
+    - status : KycStatus
+  }
+
+  class FaceScan {
+    - id : String <<PK>>
+    - scanType : ScanType
+    - score : Float
+    - livenessScore : Float
+    - confidenceScore : Float
+    - verified : Boolean
+    - failureReason : String
+  }
+}
+
+package "Annonces & Logistique" {
+
+  class Deal {
+    - id : String <<PK>>
+    - title : String
+    - fromCity : String
+    - toCity : String
+    - packageSize : PackageSize
+    - isFragile : Boolean
+    - itemValue : Float
+    - weight : Float
+    - price : Float
+    - currency : String = USD
+    - status : DealStatus = OPEN
+    - qrCode : String
+    - qrSecret : String
+    - receiverCode : String
+    - receiverName : String
+    - receiverPhone : String
+    + publish() : void
+    + match(travelerId) : void
+    + cancel(reason, evidence) : void
+    + complete() : void
+  }
+
+  class Trip {
+    - id : String <<PK>>
+    - fromCity : String
+    - toCity : String
+    - departureDate : DateTime
+    - flightNumber : String
+    - transportType : TransportType
+    - maxWeight : Float = 1.0
+    - price : Float
+    - negotiable : Boolean
+    - status : TripStatus
+    + accept(dealId) : void
+  }
+
+  class TrackingEvent {
+    - id : String <<PK>>
+    - status : String
+    - location : String
+    - actor : String
+    - createdAt : DateTime
+  }
+
+  class TrackingSession {
+    - id : String <<PK>>
+    - mode : TrackingMode
+    - gpsLat : Float
+    - gpsLng : Float
+    - flightCallsign : String
+    - flightIcao24 : String
+    + activate(mode) : void
+    + recordGps(lat, lng) : void
+  }
+
+  class PositionLog {
+    - id : BigInt <<PK>>
+    - mode : String
+    - lat : Float
+    - lng : Float
+    - source : String
+    - loggedAt : DateTime
+  }
+
+  class CustomsDeclaration {
+    - id : String <<PK>>
+    - declarationType : String
+    - items : Json
+    - declaredValue : Float
+  }
+}
+
+package "Paiement" {
+
+  class Wallet {
+    - id : String <<PK>>
+    - balance : Float
+    - pendingBalance : Float
+    - availableBalance : Float
+    - currency : String
+  }
+
+  class Transaction {
+    - id : String <<PK>>
+    - type : TransactionType
+    - amount : Float
+    - status : TxStatus
+    - stripeId : String
+    - createdAt : DateTime
+  }
+}
+
+package "Communication" {
+
+  class ChatRoom {
+    - id : String <<PK>>
+    - createdAt : DateTime
+  }
+
+  class ChatParticipant {
+    - id : String <<PK>>
+    - joinedAt : DateTime
+  }
+
+  class ChatMessage {
+    - id : String <<PK>>
+    - content : String
+    - type : MessageType
+    - imageUrl : String
+    - readAt : DateTime
+    - createdAt : DateTime
+  }
+
+  class Notification {
+    - id : String <<PK>>
+    - title : String
+    - body : String
+    - type : String
+    - read : Boolean
+  }
+}
+
+package "Litige & Confiance" {
+
+  class Dispute {
+    - id : String <<PK>>
+    - disputeType : DisputeType
+    - reason : String
+    - status : DisputeStatus
+    - resolution : String
+    - slaDeadline : DateTime
+    + open() : void
+    + resolve(outcome) : void
+  }
+
+  class DisputeEvidence {
+    - id : String <<PK>>
+    - type : EvidenceType
+    - url : String
+    - mimeType : String
+  }
+
+  class DisputeMessage {
+    - id : String <<PK>>
+    - senderRole : Role
+    - content : String
+  }
+
+  class DisputeTimelineEvent {
+    - id : String <<PK>>
+    - eventType : String
+    - actorRole : String
+    - description : String
+  }
+
+  class Review {
+    - id : String <<PK>>
+    - rating : Int
+    - comment : String
+    - sentiment : String
+    - fraudScore : Float
+    - flagged : Boolean
+    - status : String
+  }
+
+  class TrustScore {
+    - id : String <<PK>>
+    - score : Float
+    - scoreType : String
+    - completionPct : Float
+  }
+
+  class UserBlock {
+    - id : String <<PK>>
+    - blockerId : String
+    - blockedId : String
+  }
+  class UserReport {
+    - id : String <<PK>>
+    - reason : String
+    - status : String
+  }
+}
+
+package "Administration & Audit" {
+  class AdminTask {
+    - id : String <<PK>>
+    - type : String
+    - status : String
+    - assignedTo : String
+  }
+
+  class AuditLog {
+    - id : String <<PK>>
+    - entityType : String
+    - action : String
+    - ipAddress : String
+    - recordedAt : DateTime
+  }
+}
+
+User "1" *-- "0..*" Session            : owns
+User "1" *-- "0..*" KycDocument        : submits
+User "1" *-- "0..*" FaceScan           : performs
+User "1" o-- "0..1" Wallet             : has
+User "1" o-- "0..1" TrustScore         : has
+User "1" *-- "0..*" Notification       : receives
+
+User "1" --> "0..*" Deal               : sender
+User "0..1" --> "0..*" Deal            : traveler
+User "1" --> "0..*" Trip               : posts
+
+Deal "1" *-- "0..*" TrackingEvent      : timeline
+Deal "1" o-- "0..1" TrackingSession    : tracked by
+Deal "1" *-- "0..*" PositionLog        : logs
+Deal "1" *-- "0..*" Transaction        : settles
+Deal "1" *-- "0..*" CustomsDeclaration : declares
+Deal "1" o-- "0..1" ChatRoom           : conversation
+Trip "1" o-- "0..1" ChatRoom           : pre-match chat
+
+ChatRoom "1" *-- "2..*" ChatParticipant : involves
+ChatRoom "1" *-- "0..*" ChatMessage     : contains
+ChatMessage "0..1" --> "0..*" ChatMessage : replyTo
+
+User "1" --> "0..*" ChatMessage         : sends
+
+Deal "1" --> "0..*" Dispute             : may raise
+User "1" --> "0..*" Dispute             : filer
+User "1" --> "0..*" Dispute             : against
+Dispute "1" *-- "0..*" DisputeEvidence  : evidences
+Dispute "1" *-- "0..*" DisputeMessage   : thread
+Dispute "1" *-- "0..*" DisputeTimelineEvent : timeline
+
+Deal "1" --> "0..*" Review              : reviewed
+User "1" --> "0..*" Review              : author
+User "1" --> "0..*" Review              : target
+
+User "1" --> "0..*" UserBlock           : blocker
+User "1" --> "0..*" UserReport          : reporter
+User "1" --> "0..*" AuditLog            : audited
+
+@enduml

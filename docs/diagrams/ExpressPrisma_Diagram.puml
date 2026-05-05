@@ -1,0 +1,25 @@
+@startuml ExpressPrisma_Diagram
+skinparam componentStyle rectangle
+
+[Client Mobile] as Client
+[Express Router] as Router
+[Middleware\nauthenticate] as Auth
+[Middleware\nvalidate(Zod)] as Validate
+[Handler de route] as Handler
+[Service métier] as Service
+[Prisma Client] as Prisma
+database "PostgreSQL" as DB
+
+Client --> Router : HTTP request
+Router --> Auth : route protégée
+Auth --> Validate : JWT vérifié
+Validate --> Handler : payload validé
+Handler --> Service : appel logique
+Service --> Prisma : opérations CRUD\n(transaction)
+Prisma --> DB : SQL généré
+DB --> Prisma : résultat
+Prisma --> Service : objets typés
+Service --> Handler : retour
+Handler --> Client : 200/201 JSON
+
+@enduml

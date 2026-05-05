@@ -653,6 +653,7 @@ router.get('/users', async (req: Request, res: Response, next: NextFunction) => 
       where.OR = [
         { phone: { contains: q } },
         { name:  { contains: q, mode: 'insensitive' } },
+        { email: { contains: q, mode: 'insensitive' } },
       ];
     }
 
@@ -663,7 +664,7 @@ router.get('/users', async (req: Request, res: Response, next: NextFunction) => 
         take: limit,
         orderBy: { createdAt: 'desc' },
         select: {
-          id: true, phone: true, name: true, avatar: true,
+          id: true, phone: true, name: true, email: true, avatar: true,
           isAdmin: true, flagged: true, banned: true, reasonForBan: true,
           lastLoginAt: true, kycStatus: true, faceVerificationStatus: true,
           walletBalance: true, rating: true, totalDeals: true,

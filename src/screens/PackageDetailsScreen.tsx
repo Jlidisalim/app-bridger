@@ -108,7 +108,9 @@ export const PackageDetailsScreen: React.FC<PackageDetailsScreenProps> = ({ onNe
             const picked = result.assets
                 .map((a) => {
                     if (a.base64) {
-                        const mime = a.type || 'image/jpeg';
+                        // a.type is the media category ("image"/"video"), not a MIME type.
+                        // Use a.mimeType when available; fall back to image/jpeg.
+                        const mime = a.mimeType || 'image/jpeg';
                         return `data:${mime};base64,${a.base64}`;
                     }
                     return a.uri;

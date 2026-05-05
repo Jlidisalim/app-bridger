@@ -9,6 +9,7 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import UserManagement from './pages/UserManagement'
 import UserKycPreview from './pages/UserKycPreview'
+import UserActivity from './pages/UserActivity'
 import DealsEscrow from './pages/DealsEscrow'
 import ContentModeration from './pages/ContentModeration'
 import ShipmentPosts from './pages/ShipmentPosts'
@@ -43,6 +44,7 @@ const router = createBrowserRouter([
       { path: 'dashboard',        element: <Dashboard /> },
       { path: 'users',            element: <UserManagement /> },
       { path: 'users/:id/kyc',    element: <UserKycPreview /> },
+      { path: 'users/:id/activity', element: <UserActivity /> },
       { path: 'transactions',     element: <DealsEscrow /> },
       { path: 'deals',            element: <Navigate to="/transactions" replace /> },
       { path: 'shipments',        element: <ShipmentPosts /> },

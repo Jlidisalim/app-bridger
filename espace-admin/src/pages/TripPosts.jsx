@@ -12,8 +12,9 @@
  * - Loading and error states added.
  */
 import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
-  AlertTriangle, Plane, Car, Bus, Ship, Star, FileText, Ban,
+  AlertTriangle, Plane, Car, Bus, Ship, Star, FileText,
   Eye, Search, ChevronDown, MapPin, Loader2, AlertCircle,
   X, Calendar, User, Shield
 } from 'lucide-react'
@@ -35,8 +36,30 @@ const TRANSPORT_META = {
 }
 const INIT_COLORS    = ['bg-blue-200 text-blue-700','bg-purple-200 text-purple-700','bg-rose-200 text-rose-700','bg-emerald-200 text-emerald-700','bg-amber-200 text-amber-700','bg-indigo-200 text-indigo-700','bg-teal-200 text-teal-700','bg-orange-200 text-orange-700']
 
+// Granular status mapping. Note: a trip is "open" only while it has not been
+// matched and the departure date is still in the future — handled in
+// resolveTripStatus().
 const BACKEND_STATUS_MAP = {
-  OPEN: 'active', MATCHED: 'active', COMPLETED: 'completed', CANCELLED: 'suspended',
+  OPEN: 'open', MATCHED: 'matched', COMPLETED: 'completed', CANCELLED: 'canceled',
+}
+
+function resolveTripStatus(trip) {
+  const base = BACKEND_STATUS_MAP[trip.status] ?? trip.status?.toLowerCase()
+  // OPEN trips whose departure date has passed are no longer truly open;
+  // surface them as canceled so the UI matches the cleanup semantics.
+  if (base === 'open' && trip.departureDate && new Date(trip.departureDate) < new Date()) {
+    return 'canceled'
+  }
+  return base
+}
+
+// Pastel palette shared by KPI cards and bottom chart cards.
+const PASTEL = {
+  blue:    { bar: '#93C5FD', soft: '#DBEAFE', text: '#1D4ED8' },
+  pink:    { bar: '#F9A8D4', soft: '#FCE7F3', text: '#BE185D' },
+  mint:    { bar: '#6EE7B7', soft: '#D1FAE5', text: '#047857' },
+  lavender:{ bar: '#C4B5FD', soft: '#EDE9FE', text: '#5B21B6' },
+  peach:   { bar: '#FDBA74', soft: '#FFEDD5', text: '#C2410C' },
 }
 
 // ── Drawer helpers ──────────────────────────────────────────────────────────
@@ -114,7 +137,7 @@ function TripDrawer({ open, trip, detail, loading, error, onClose }) {
               <span className="truncate">{source?.fromCity ?? '—'} → {source?.toCity ?? '—'}</span>
             </h2>
             <div className="flex items-center gap-2 mt-2">
-              {source?.status && <StatusBadge status={BACKEND_STATUS_MAP[source.status] ?? source.status?.toLowerCase()} />}
+              {source?.status && <StatusBadge status={resolveTripStatus(source)} />}
               {source?.mlScore != null && <RiskBadge score={Math.round(source.mlScore)} />}
               {source?.flagged && <span className="text-[10px] font-bold px-2 py-1 bg-amber-100 text-amber-700 rounded-full">FLAGGED</span>}
             </div>
@@ -268,6 +291,7 @@ function Stars({ rating }) {
 }
 
 export default function TripPosts() {
+  const navigate = useNavigate()
   const [page,         setPage]         = useState(1)
   const [searchInput,  setSearchInput]  = useState('')
   const [search,       setSearch]       = useState('')
@@ -352,27 +376,13 @@ export default function TripPosts() {
   function handleAction(trip, action) {
     const alreadyFlagged = trip.flagged
     setConfirm({
-      title: action === 'suspend'
-        ? `Cancel Trip ${trip.id.slice(-6)}`
-        : alreadyFlagged ? `Unflag Trip ${trip.id.slice(-6)}` : `Flag Trip ${trip.id.slice(-6)}`,
-      message: action === 'suspend'
-        ? `Cancel trip ${trip.id.slice(-6)}? Calls DELETE /admin/trips/:id (admin bypass).`
-        : alreadyFlagged
-          ? `Remove the flag from trip ${trip.id.slice(-6)}.`
-          : `Flag trip ${trip.id.slice(-6)} for review. Calls PATCH /admin/trips/:id/flag.`,
-      danger: action === 'suspend',
+      title: alreadyFlagged ? `Unflag Trip ${trip.id.slice(-6)}` : `Flag Trip ${trip.id.slice(-6)}`,
+      message: alreadyFlagged
+        ? `Remove the flag from trip ${trip.id.slice(-6)}.`
+        : `Flag trip ${trip.id.slice(-6)} for review. Calls PATCH /admin/trips/:id/flag.`,
+      danger: false,
       onConfirm: async () => {
-        if (action === 'suspend') {
-          // Admin cancel endpoint bypasses the traveler-ownership check
-          try {
-            await api.delete(`/admin/trips/${trip.id}`)
-            setTrips(prev => prev.map(t => t.id === trip.id ? { ...t, status: 'CANCELLED' } : t))
-          } catch (err) {
-            setError(err.response?.data?.error || 'Cancel failed.')
-          }
-        }
         if (action === 'flag') {
-          // Toggle flagged field via new admin endpoint
           try {
             const newFlagged = !alreadyFlagged
             await api.patch(`/admin/trips/${trip.id}/flag`, { flagged: newFlagged })
@@ -459,8 +469,29 @@ export default function TripPosts() {
 
       {/* KPIs */}
       <div className="grid grid-cols-3 gap-4">
-        <KpiCard label="Total Trips"      value={total.toLocaleString()}    changeType="neutral" icon={<MapPin className="w-4 h-4 text-blue-600" />}    accentColor="#3B82F6" />
-        <KpiCard label="High Risk"        value={highRisk.length.toString()} sublabel="flagged on this page" changeType="neutral" icon={<AlertTriangle className="w-4 h-4 text-red-600" />}  accentColor="#DC2626" />
+        <KpiCard
+          label="Total Trips"
+          value={total.toLocaleString()}
+          changeType="neutral"
+          icon={<MapPin className="w-4 h-4" style={{ color: PASTEL.blue.text }} />}
+          accentColor={PASTEL.blue.bar}
+        />
+        <button
+          type="button"
+          onClick={() => navigate('/moderation')}
+          className="text-left rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 hover:-translate-y-0.5 transition-transform cursor-pointer"
+          title="Open Risk Assessment"
+          aria-label="Risk active matched — open Risk Assessment page"
+        >
+          <KpiCard
+            label="Risk Active Matched"
+            value={highRisk.length.toString()}
+            sublabel="click to open Risk page"
+            changeType="neutral"
+            icon={<AlertTriangle className="w-4 h-4" style={{ color: PASTEL.pink.text }} />}
+            accentColor={PASTEL.pink.bar}
+          />
+        </button>
         <TransportMixCard data={transportMix} />
       </div>
 
@@ -530,7 +561,7 @@ export default function TripPosts() {
               <tbody>
                 {trips.map((trip, idx) => {
                   const TransIcon   = (TRANSPORT_META[trip.transportType] ?? TRANSPORT_META.PLANE).icon
-                  const uiStatus    = BACKEND_STATUS_MAP[trip.status] ?? trip.status?.toLowerCase()
+                  const uiStatus    = resolveTripStatus(trip)
                   const travelerName = trip.traveler?.name ?? '—'
 
                   return (
@@ -592,14 +623,6 @@ export default function TripPosts() {
                           >
                             <FileText className="w-4 h-4" />
                           </button>
-                          {trip.status !== 'CANCELLED' && trip.status !== 'COMPLETED' && (
-                            <button
-                              onClick={() => handleAction(trip, 'suspend')}
-                              className="p-1.5 rounded-lg hover:bg-red-50 text-red-500 transition-colors" title="Cancel trip"
-                            >
-                              <Ban className="w-4 h-4" />
-                            </button>
-                          )}
                         </div>
                       </td>
                     </tr>
@@ -620,41 +643,40 @@ export default function TripPosts() {
         <Pagination page={page} totalPages={Math.ceil(total / perPage) || 1} total={total} perPage={perPage} onPage={p => setPage(p)} />
       </div>
 
-      {/* Bottom: Corridors as data cards */}
+      {/* Bottom: chart cards — Top 5 Departures swapped into the slot Top Corridors used to occupy */}
       <div className="grid grid-cols-2 gap-4">
-        <div className="bg-surface-container-lowest rounded-xl shadow-card border border-surface-container p-5">
-          <h3 className="text-sm font-semibold text-on-surface mb-4">Top Corridors</h3>
-          {corridors.length > 0 ? (
-            <ResponsiveContainer width="100%" height={Math.max(160, corridors.length * 44)}>
+        <div className="rounded-xl shadow-card border border-surface-container p-5" style={{ background: PASTEL.mint.soft }}>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-semibold text-on-surface">Top 5 Departures</h3>
+              <p className="text-xs text-on-surface-variant mt-0.5">Most common origin cities</p>
+            </div>
+            <span className="text-[10px] font-bold px-2 py-1 rounded-full" style={{ background: PASTEL.mint.bar, color: PASTEL.mint.text }}>LIVE DATA</span>
+          </div>
+          {topDepartures.length > 0 ? (
+            <ResponsiveContainer width="100%" height={Math.max(180, topDepartures.length * 44)}>
               <BarChart
-                data={corridors}
+                data={topDepartures}
                 layout="vertical"
                 margin={{ top: 4, right: 24, left: 8, bottom: 4 }}
                 barCategoryGap="20%"
               >
                 <CartesianGrid horizontal={false} stroke="#E5E7EB" />
-                <XAxis type="number" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  tick={{ fontSize: 11 }}
-                  tickLine={false}
-                  axisLine={false}
-                  width={140}
-                />
-                <Tooltip formatter={v => [`${v} trips`, 'Volume']} cursor={{ fill: 'rgba(26,46,130,0.05)' }} />
-                <Bar dataKey="count" fill="#1A2E82" radius={[0, 6, 6, 0]} />
+                <XAxis type="number" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={140} />
+                <Tooltip formatter={v => [`${v} trips`, 'Volume']} cursor={{ fill: 'rgba(110,231,183,0.15)' }} />
+                <Bar dataKey="count" fill={PASTEL.mint.bar} radius={[0, 6, 6, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <p className="text-sm text-on-surface-variant text-center py-8">No route data yet</p>
+            <p className="text-sm text-on-surface-variant text-center py-12">No departure data yet</p>
           )}
         </div>
 
-        <div className="bg-surface-container-lowest rounded-xl shadow-card border border-surface-container p-5">
+        <div className="rounded-xl shadow-card border border-surface-container p-5" style={{ background: PASTEL.peach.soft }}>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-on-surface">Top 5 Destinations</h3>
-            <span className="text-[10px] font-bold px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full">LIVE DATA</span>
+            <span className="text-[10px] font-bold px-2 py-1 rounded-full" style={{ background: PASTEL.peach.bar, color: PASTEL.peach.text }}>LIVE DATA</span>
           </div>
           {topDestinations.length > 0 ? (
             <ResponsiveContainer width="100%" height={Math.max(180, topDestinations.length * 44)}>
@@ -667,8 +689,8 @@ export default function TripPosts() {
                 <CartesianGrid horizontal={false} stroke="#E5E7EB" />
                 <XAxis type="number" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={140} />
-                <Tooltip formatter={v => [`${v} trips`, 'Volume']} cursor={{ fill: 'rgba(26,46,130,0.05)' }} />
-                <Bar dataKey="count" fill="#1A2E82" radius={[0, 6, 6, 0]} />
+                <Tooltip formatter={v => [`${v} trips`, 'Volume']} cursor={{ fill: 'rgba(253,186,116,0.15)' }} />
+                <Bar dataKey="count" fill={PASTEL.peach.bar} radius={[0, 6, 6, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
@@ -677,32 +699,33 @@ export default function TripPosts() {
         </div>
       </div>
 
-      {/* Top 5 Departures — where trips originate from */}
-      <div className="bg-surface-container-lowest rounded-xl shadow-card border border-surface-container p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-sm font-semibold text-on-surface">Top 5 Departures</h3>
-            <p className="text-xs text-on-surface-variant mt-0.5">Most common origin cities</p>
-          </div>
-          <span className="text-[10px] font-bold px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full">LIVE DATA</span>
-        </div>
-        {topDepartures.length > 0 ? (
-          <ResponsiveContainer width="100%" height={Math.max(180, topDepartures.length * 44)}>
+      {/* Top Corridors — moved into the row that previously held Top 5 Departures */}
+      <div className="rounded-xl shadow-card border border-surface-container p-5" style={{ background: PASTEL.lavender.soft }}>
+        <h3 className="text-sm font-semibold text-on-surface mb-4">Top Corridors</h3>
+        {corridors.length > 0 ? (
+          <ResponsiveContainer width="100%" height={Math.max(160, corridors.length * 44)}>
             <BarChart
-              data={topDepartures}
+              data={corridors}
               layout="vertical"
               margin={{ top: 4, right: 24, left: 8, bottom: 4 }}
               barCategoryGap="20%"
             >
               <CartesianGrid horizontal={false} stroke="#E5E7EB" />
-              <XAxis type="number" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} />
-              <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={140} />
-              <Tooltip formatter={v => [`${v} trips`, 'Volume']} cursor={{ fill: 'rgba(16,185,129,0.05)' }} />
-              <Bar dataKey="count" fill="#10B981" radius={[0, 6, 6, 0]} />
+              <XAxis type="number" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+              <YAxis
+                type="category"
+                dataKey="name"
+                tick={{ fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
+                width={140}
+              />
+              <Tooltip formatter={v => [`${v} trips`, 'Volume']} cursor={{ fill: 'rgba(196,181,253,0.18)' }} />
+              <Bar dataKey="count" fill={PASTEL.lavender.bar} radius={[0, 6, 6, 0]} />
             </BarChart>
           </ResponsiveContainer>
         ) : (
-          <p className="text-sm text-on-surface-variant text-center py-12">No departure data yet</p>
+          <p className="text-sm text-on-surface-variant text-center py-8">No route data yet</p>
         )}
       </div>
 
@@ -711,7 +734,7 @@ export default function TripPosts() {
         title={confirm?.title}
         message={confirm?.message}
         danger={confirm?.danger}
-        confirmLabel={confirm?.danger ? 'Cancel Trip' : 'Flag'}
+        confirmLabel="Flag"
         onConfirm={confirm?.onConfirm}
         onCancel={() => setConfirm(null)}
       />

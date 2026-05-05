@@ -9,7 +9,7 @@ export default function KpiCard({ label, value, change, changeType = 'neutral', 
   const ChangeIcon = changeType === 'up' ? TrendingUp : changeType === 'down' ? TrendingDown : Minus
 
   return (
-    <div className="bg-surface-container-lowest rounded-xl shadow-card border border-surface-container overflow-hidden">
+    <div className="relative bg-surface-container-lowest rounded-xl shadow-card border border-surface-container overflow-hidden">
       <div style={{ backgroundColor: accentColor, height: 3 }} />
       <div className="p-5">
         <div className="flex items-start justify-between mb-3">
@@ -23,15 +23,17 @@ export default function KpiCard({ label, value, change, changeType = 'neutral', 
         <div className="flex items-baseline gap-2 mb-2">
           <span className="text-[22px] font-semibold text-on-surface leading-tight">{value}</span>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {change && (
-            <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${changeColors[changeType]}`}>
-              <ChangeIcon className="w-3 h-3" /> {change}
-            </span>
-          )}
+        <div className="flex items-center gap-2 flex-wrap min-h-[20px]">
           {sublabel && <span className="text-[11px] text-on-surface-variant">{sublabel}</span>}
         </div>
       </div>
+      {change && (
+        <span
+          className={`absolute bottom-3 right-3 inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full shadow-sm ring-1 ring-white/40 ${changeColors[changeType]}`}
+        >
+          <ChangeIcon className="w-3 h-3" /> {change}
+        </span>
+      )}
     </div>
   )
 }

@@ -1,0 +1,19 @@
+@startuml StateDiagram_Deal
+[*] --> OPEN : POST /deals
+OPEN --> MATCHED : POST /deals/:id/match\n(escrow hold)
+MATCHED --> ESCROW_PAID : webhook\npayment_intent.succeeded
+ESCROW_PAID --> PICKED_UP : POST /deals/:id/pickup\n(QR vérifié)
+PICKED_UP --> IN_TRANSIT : status update
+IN_TRANSIT --> DELIVERED : POST /deals/:id/deliver
+DELIVERED --> COMPLETED : POST /deals/receiver-verify\n(escrow release)
+COMPLETED --> [*]
+
+OPEN --> CANCELLED : DELETE /deals/:id
+MATCHED --> CANCELLED : cancel + refund
+PICKED_UP --> DISPUTED : POST /disputes
+IN_TRANSIT --> DISPUTED : POST /disputes
+DELIVERED --> DISPUTED : POST /disputes
+DISPUTED --> COMPLETED : RESOLVED_AGAINST_WIN
+DISPUTED --> CANCELLED : RESOLVED_FILER_WIN\n(refund)
+CANCELLED --> [*]
+@enduml

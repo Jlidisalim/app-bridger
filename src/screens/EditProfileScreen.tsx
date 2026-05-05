@@ -24,6 +24,7 @@ export const EditProfileScreen: React.FC = () => {
   const setCurrentUser = useAppStore((s) => s.setCurrentUser);
 
   const [name, setName] = useState(currentUser?.name || '');
+  const [email, setEmail] = useState(currentUser?.email || '');
   const [saving, setSaving] = useState(false);
   const [photoSaving, setPhotoSaving] = useState(false);
   const [avatarUri, setAvatarUri] = useState(currentUser?.profilePhoto || currentUser?.avatar || '');
@@ -69,20 +70,30 @@ export const EditProfileScreen: React.FC = () => {
       return;
     }
 
+    const trimmedEmail = email.trim();
+    if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      Alert.alert('Error', 'Please enter a valid email address');
+      return;
+    }
+
     setSaving(true);
     try {
-      const response = await userApi.updateProfile({ name: name.trim() } as any);
+      const payload: any = { name: name.trim() };
+      if (trimmedEmail) payload.email = trimmedEmail;
+      const response = await userApi.updateProfile(payload);
       if (response.success && response.data) {
         // Preserve the photo that was already saved via pickImage
         const photo = response.data.profilePhoto || response.data.avatar || avatarUri;
-        setCurrentUser({ ...response.data, profilePhoto: photo, avatar: photo });
+        // Backend response may omit email — fall back to what we just sent
+        const persistedEmail = (response.data as any).email ?? (trimmedEmail || currentUser?.email);
+        setCurrentUser({ ...response.data, email: persistedEmail, profilePhoto: photo, avatar: photo });
       } else {
-        setCurrentUser({ ...currentUser!, name: name.trim() });
+        setCurrentUser({ ...currentUser!, name: name.trim(), email: trimmedEmail || currentUser?.email });
       }
       Alert.alert('Success', 'Profile updated');
       navigation.goBack();
     } catch {
-      setCurrentUser({ ...currentUser!, name: name.trim() });
+      setCurrentUser({ ...currentUser!, name: name.trim(), email: trimmedEmail || currentUser?.email });
       Alert.alert('Success', 'Profile updated');
       navigation.goBack();
     } finally {
@@ -163,11 +174,16 @@ export const EditProfileScreen: React.FC = () => {
           <Typography size="sm" weight="bold" color="#666" style={styles.label}>
             EMAIL
           </Typography>
-          <View style={styles.input}>
-            <Typography size="md" color="#666">
-              {currentUser?.email || 'Not set'}
-            </Typography>
-          </View>
+          <TextInput
+            style={styles.input}
+            value={email}
+            onChangeText={setEmail}
+            placeholder="Enter your email"
+            placeholderTextColor="#999"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
         </View>
       </ScrollView>
     </SafeAreaView>

@@ -1,0 +1,134 @@
+@startuml UseCase_Bridger
+left to right direction
+skinparam packageStyle rectangle
+skinparam actorStyle awesome
+skinparam usecase {
+  BackgroundColor #EAF2FB
+  BorderColor #1E3B8A
+}
+
+actor "Expéditeur" as Sender
+actor "Voyageur" as Traveler
+actor "Destinataire" as Receiver
+actor "Administrateur" as Admin
+actor "Système" as System
+
+rectangle "Plateforme Bridger" {
+
+  package "Authentification & Identité" {
+    usecase "Saisir numéro\nde téléphone" as UC_Phone
+    usecase "Vérifier OTP\nTwilio Verify" as UC_OTP
+    usecase "Téléverser pièce\nd'identité" as UC_KYC
+    usecase "Capturer un selfie" as UC_Selfie
+    usecase "Comparer biométrie\n(ArcFace cosinus)" as UC_Compare
+    usecase "Contrôler la qualité\nde l'image" as UC_Quality
+    usecase "Détecter la vivacité\n(liveness)" as UC_Liveness
+    usecase "Extraire les informations\nID via OCR" as UC_OCR
+  }
+
+  package "Annonces & Appariement" {
+    usecase "Publier une demande\nde colis" as UC_PostDeal
+    usecase "Publier un trajet\nvoyageur" as UC_PostTrip
+    usecase "Rechercher\ndes annonces" as UC_Search
+    usecase "Apparier un Deal\nà un Trip" as UC_Match
+    usecase "Suggérer un prix\n(XGBoost)" as UC_Price
+  }
+
+  package "Paiement & Séquestre" {
+    usecase "Recharger\nle portefeuille" as UC_Deposit
+    usecase "Bloquer en\nséquestre (escrow)" as UC_Hold
+    usecase "Libérer\nle séquestre" as UC_Release
+    usecase "Rembourser\nl'expéditeur" as UC_Refund
+    usecase "Effectuer un\nretrait Stripe Connect" as UC_Payout
+    usecase "Vérifier signature\nwebhook Stripe" as UC_Webhook
+  }
+
+  package "Suivi & Livraison" {
+    usecase "Activer le suivi\nGPS / vol" as UC_TrackOn
+    usecase "Émettre la position\nen temps réel" as UC_GPS
+    usecase "Suivre un vol via\nOpenSky" as UC_Flight
+    usecase "Générer un QR\nsigné HMAC" as UC_QR
+    usecase "Confirmer la\nlivraison" as UC_Confirm
+    usecase "Saisir le code\nà 6 chiffres" as UC_RecvCode
+  }
+
+  package "Communication" {
+    usecase "Discuter via\nchat temps réel" as UC_Chat
+    usecase "Bloquer / Signaler\nun utilisateur" as UC_Block
+  }
+
+  package "Litige & Modération" {
+    usecase "Ouvrir un litige" as UC_Dispute
+    usecase "Déposer une preuve" as UC_Evidence
+    usecase "Évaluer un partenaire\n(1–5 étoiles)" as UC_Review
+    usecase "Détecter un avis\nfrauduleux (NLP)" as UC_Fraud
+    usecase "Trancher un litige" as UC_Resolve
+  }
+
+  package "Administration" {
+    usecase "Consulter les KPI" as UC_Stats
+    usecase "Modérer les KYC" as UC_ModKyc
+    usecase "Bannir / flagger\nun utilisateur" as UC_Ban
+    usecase "Auditer les\nactions sensibles" as UC_Audit
+  }
+}
+
+Sender --> UC_Phone
+Sender --> UC_PostDeal
+Sender --> UC_Search
+Sender --> UC_Deposit
+Sender --> UC_Chat
+Sender --> UC_Dispute
+Sender --> UC_Review
+Sender --> UC_Block
+
+Traveler --> UC_Phone
+Traveler --> UC_PostTrip
+Traveler --> UC_Search
+Traveler --> UC_TrackOn
+Traveler --> UC_GPS
+Traveler --> UC_QR
+Traveler --> UC_Payout
+Traveler --> UC_Chat
+Traveler --> UC_Dispute
+Traveler --> UC_Review
+Traveler --> UC_Block
+
+Receiver --> UC_RecvCode
+Receiver --> UC_Confirm
+
+Admin --> UC_Stats
+Admin --> UC_ModKyc
+Admin --> UC_Ban
+Admin --> UC_Audit
+Admin --> UC_Resolve
+
+System --> UC_Webhook
+System --> UC_Flight
+System --> UC_Fraud
+System --> UC_Hold
+System --> UC_Release
+System --> UC_Refund
+System --> UC_Price
+
+UC_Phone     ..> UC_OTP        : <<include>>
+UC_KYC       ..> UC_OCR        : <<include>>
+UC_Selfie    ..> UC_Quality    : <<include>>
+UC_Selfie    ..> UC_Liveness   : <<include>>
+UC_Compare   ..> UC_KYC        : <<include>>
+UC_Compare   ..> UC_Selfie     : <<include>>
+UC_PostDeal  ..> UC_Price      : <<include>>
+UC_Match     ..> UC_Hold       : <<include>>
+UC_Confirm   ..> UC_Release    : <<include>>
+UC_Confirm   ..> UC_RecvCode   : <<include>>
+UC_QR        ..> UC_Match      : <<include>>
+UC_Resolve   ..> UC_Refund     : <<extend>>
+
+UC_Review    <.. UC_Fraud      : <<extend>>
+UC_Dispute   <.. UC_Evidence   : <<extend>>
+UC_Search    <.. UC_Price      : <<extend>>
+
+Sender   --|> Traveler : (rôles partiels)
+note right of Sender : Un User unique peut\nendosser les deux rôles\nvia le champ `mode`
+
+@enduml

@@ -1,0 +1,31 @@
+@startuml Twilio_Diagram
+skinparam sequenceArrowThickness 1.5
+skinparam participantBackgroundColor #F8FAFF
+skinparam participantBorderColor #1E3B8A
+skinparam noteBackgroundColor #FFFAEC
+
+actor "Utilisateur" as U
+participant "Application Mobile" as App
+participant "Backend\nExpress" as API
+participant "Twilio Verify API" as Twilio
+participant "Téléphone\nSMS / WhatsApp" as Phone
+
+U -> App  : Saisit le numéro
+App -> API : POST /auth/otp/send
+API -> Twilio : verifications.create\n(channel: sms|whatsapp)
+note right of API : Le code n'est jamais\nstocké côté serveur\n(zero-knowledge)
+Twilio -> Phone : Message OTP
+Phone -> U : Code reçu
+U -> App : Saisit le code
+App -> API : POST /auth/otp/verify
+API -> Twilio : verificationChecks.create
+alt status = approved
+  Twilio --> API : approved
+  API -> API : Création JWT
+  API --> App : 200 {access, refresh, user}
+else status = pending / expired
+  Twilio --> API : pending
+  API --> App : 400 {error}
+end
+
+@enduml

@@ -140,7 +140,7 @@ function PhotoGallery({ photos }) {
     <div>
       <div className="relative w-full aspect-video bg-surface-container-low rounded-xl overflow-hidden">
         <img
-          src={current}
+          src={resolveMediaUrl(current)}
           alt={`Photo ${active + 1}`}
           className="w-full h-full object-cover"
           onError={(e) => { e.currentTarget.style.display = 'none' }}
@@ -159,7 +159,7 @@ function PhotoGallery({ photos }) {
                 i === active ? 'border-primary' : 'border-transparent opacity-60 hover:opacity-100'
               }`}
             >
-              <img src={url} alt={`Thumb ${i + 1}`} className="w-full h-full object-cover" />
+              <img src={resolveMediaUrl(url)} alt={`Thumb ${i + 1}`} className="w-full h-full object-cover" />
             </button>
           ))}
         </div>
@@ -376,8 +376,16 @@ function ShipmentDrawer({ open, deal, detail, loading, error, onClose }) {
   )
 }
 
+// Build the Risk-Page URL for a specific deal so every entry-point uses the
+// same query-param contract. Keeping it in one place prevents the kind of
+// "card opens the wrong detail" mismatch this refactor is meant to fix.
+function riskPageHrefForDeal(dealId) {
+  const params = new URLSearchParams({ dealId, focus: 'high-risk', source: 'shipments' })
+  return `/moderation?${params.toString()}`
+}
+
 // High Risk details table component
-function HighRiskTable({ deals }) {
+function HighRiskTable({ deals, onOpenRisk }) {
   if (!deals || deals.length === 0) {
     return (
       <div className="py-8 text-center text-sm text-on-surface-variant">
@@ -388,18 +396,28 @@ function HighRiskTable({ deals }) {
   return (
     <div className="mt-4 space-y-2">
       {deals.map(d => (
-        <div key={d.id} className="bg-surface-container rounded-lg p-3 flex items-center justify-between">
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-on-surface">{d.fromCity} → {d.toCity}</p>
+        <button
+          key={d.id}
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onOpenRisk(d.id) }}
+          className="w-full text-left bg-surface-container hover:bg-surface-container-high rounded-lg p-3 flex items-center justify-between transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300"
+          title="Open this shipment in the Risk page"
+          aria-label={`Open Risk detail for shipment ${d.id.slice(-8)}`}
+        >
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-on-surface truncate">{d.fromCity} → {d.toCity}</p>
             <p className="text-xs text-on-surface-variant">
               {d.sender?.name ?? 'Unknown'} · ID: #{d.id.slice(-8)}
             </p>
           </div>
-          <div className="text-right">
-            <p className="text-sm font-semibold text-red-600">Score: {Math.round(d.mlScore ?? 0)}</p>
-            <p className="text-xs text-on-surface-variant">mlScore &gt; 60</p>
+          <div className="text-right flex items-center gap-2">
+            <div>
+              <p className="text-sm font-semibold text-red-600">Score: {Math.round(d.mlScore ?? 0)}</p>
+              <p className="text-[10px] text-on-surface-variant">Open in Risk →</p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-on-surface-variant" />
           </div>
-        </div>
+        </button>
       ))}
     </div>
   )
@@ -543,8 +561,23 @@ export default function ShipmentPosts() {
                 )}
               </div>
             </div>
-            <p className="text-[10px] text-on-surface-variant mt-1">mlScore &gt; 60 · click to {highRiskExpanded ? 'collapse' : 'expand'}</p>
-            {highRiskExpanded && <HighRiskTable deals={highRiskDeals} />}
+            <div className="mt-1 flex items-center justify-between gap-2">
+              <p className="text-[10px] text-on-surface-variant">mlScore &gt; 60 · click to {highRiskExpanded ? 'collapse' : 'expand'}</p>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); navigate('/moderation?focus=high-risk&source=shipments') }}
+                className="text-[10px] font-semibold text-red-600 hover:text-red-700 hover:underline focus:outline-none focus-visible:underline"
+                title="Open the Risk page"
+              >
+                Open Risk page →
+              </button>
+            </div>
+            {highRiskExpanded && (
+              <HighRiskTable
+                deals={highRiskDeals}
+                onOpenRisk={(dealId) => navigate(riskPageHrefForDeal(dealId))}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -627,8 +660,19 @@ export default function ShipmentPosts() {
                       <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700`}>FIXED</span>
                     </td>
                     <td className="px-5 py-4"><StatusBadge status={STATUS_DISPLAY[s.status] ?? s.status?.toLowerCase()} /></td>
-                    {/* mlScore is a real DB field after the add_missing_fields migration */}
-                    <td className="px-5 py-4"><RiskBadge score={Math.round(s.mlScore ?? 0)} /></td>
+                    {/* mlScore is a real DB field after the add_missing_fields migration.
+                        Wrap in a button so the badge maps directly to the matching Risk page detail. */}
+                    <td className="px-5 py-4">
+                      <button
+                        type="button"
+                        onClick={() => navigate(riskPageHrefForDeal(s.id))}
+                        className="rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300"
+                        title="Open Risk detail for this shipment"
+                        aria-label={`Open Risk detail for shipment ${s.id.slice(-8)}`}
+                      >
+                        <RiskBadge score={Math.round(s.mlScore ?? 0)} />
+                      </button>
+                    </td>
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-1">
                         <button

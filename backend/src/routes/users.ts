@@ -107,6 +107,7 @@ router.patch('/me', authenticate, validate(updateProfileSchema), async (req: any
       id: user.id,
       phone: user.phone,
       name: user.name,
+      email: user.email,
       avatar: user.profilePhoto || user.avatar,
       profilePhoto: user.profilePhoto,
       kycStatus: user.kycStatus,

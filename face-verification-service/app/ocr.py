@@ -235,64 +235,180 @@ def _extract_structured_arabic(image: np.ndarray, bbox_results: list) -> dict:
 
 # ── ID number extraction ───────────────────────────────────────────────────────
 
-# Keywords that precede the ID number on various national cards
+# Keywords that precede or follow the ID number on various national cards.
+# Compound (multi-word) forms come first — the scoring step gives them a
+# stronger proximity bonus than single-word labels.
 _ID_NUMBER_KEYWORDS = [
-    # Arabic
-    'رقم البطاقة', 'رقم الوطنية', 'رقم الوثيقة', 'رقم',
-    # French / European
-    'numéro', 'numero', 'n°', 'no.', 'nr.', 'id no', 'id number',
-    'document no', 'card no', 'cin', 'personal no', 'national no',
+    # Arabic compound (high specificity)
+    'رقم البطاقة', 'رقم الوطنية', 'رقم الوثيقة', 'رقم التعريف',
+    # Latin compound
+    'numéro de la carte', 'numéro de carte', 'numéro de cin',
+    'card number', 'document number', 'id number', 'national id',
+    'personal number', 'national number',
+    # Short labels (word-boundary anchored at use site)
+    'numéro', 'numero', 'n°', 'no.', 'nr.', 'cin', 'nin',
+    'id no', 'document no', 'card no',
+    # Generic Arabic — last resort, lowest specificity
+    'رقم',
 ]
+
+# Phone-number labels — used to PENALIZE digit candidates that look like
+# phone numbers rather than ID numbers (some IDs print a contact number).
+_PHONE_KEYWORDS = (
+    'tel', 'tél', 'tele', 'téle', 'phone', 'mob', 'gsm',
+    'هاتف', 'جوال', 'موبايل',
+)
+
+# Numeric date patterns used for date-masking before ID extraction
+_DATE_MASK_PATTERNS = [
+    r'\b\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4}\b',
+    r'\b\d{4}[./\-]\d{1,2}[./\-]\d{1,2}\b',
+    r'\b\d{1,2}\s+\d{1,2}\s+\d{4}\b',
+    r'\b\d{4}\s+\d{1,2}\s+\d{1,2}\b',
+]
+
+
+def _mask_non_id_numbers(text: str) -> str:
+    """
+    Replace date patterns with spaces so they cannot be matched as ID numbers.
+    Length-preserving so position-based proximity scoring stays accurate.
+    """
+    masked = text
+    for pat in _DATE_MASK_PATTERNS:
+        masked = re.sub(pat, lambda m: ' ' * len(m.group(0)), masked)
+    # Written-month dates: "16 يوليو 2003" / "16 juillet 2003"
+    month_pattern = '|'.join(
+        re.escape(mn) for mn in sorted(_MONTH_NAMES, key=len, reverse=True)
+    )
+    masked = re.sub(
+        rf'\d{{1,2}}\s+(?:{month_pattern})\s+\d{{2,4}}',
+        lambda m: ' ' * len(m.group(0)),
+        masked,
+        flags=re.IGNORECASE,
+    )
+    masked = re.sub(
+        rf'(?:{month_pattern})\s+\d{{2,4}}',
+        lambda m: ' ' * len(m.group(0)),
+        masked,
+        flags=re.IGNORECASE,
+    )
+    return masked
+
+
+def _looks_repetitive(value: str) -> bool:
+    """Reject obvious OCR-noise values: 11111111, 12345678, 87654321."""
+    if len(set(value)) <= 2:
+        return True
+    diffs = [ord(value[i + 1]) - ord(value[i]) for i in range(len(value) - 1)]
+    if all(d == 1 for d in diffs) or all(d == -1 for d in diffs):
+        return True
+    return False
+
 
 def _extract_id_number(full_text: str, latin_lines: list) -> Optional[str]:
     """
-    Extract the national ID card number from OCR text.
+    Extract the national ID card number using a candidate-scoring strategy.
 
-    Strategy (in order):
-    1. Look for number after a known label keyword
-    2. Tunisian CIN: standalone clean 8-digit sequence (not a year/date fragment)
-    3. Common national ID patterns: 1-2 letters + 5-9 digits (Moroccan, Algerian, etc.)
+    Pipeline:
+      1. Mask date patterns so they cannot be matched as ID numbers.
+      2. Generate candidates from format-specific patterns:
+         A — letter(s)+digits  (Moroccan CIN, passports, European IDs)
+         B — long digit-only   (Algerian NIN, etc.)
+         C — 8-digit Tunisian CIN (latin-OCR pass first, more reliable)
+         D — medium digits     (only viable when a label is nearby)
+      3. Score = base format confidence + proximity bonus from the closest
+         label keyword (compound keywords yield a stronger bonus).
+      4. Penalize candidates next to a phone-number keyword.
+      5. Reject obvious noise (repeated/sequential digits) and
+         sub-threshold candidates.
+
+    Falls back to format match alone when OCR fails to read the label, so
+    it works on any ID where a recognisable number pattern is present.
     """
     text_norm = _normalise_digits(full_text)
-    text_lower = text_norm.lower()
+    masked = _mask_non_id_numbers(text_norm)
+    masked_upper = masked.upper()
+    text_lower = masked.lower()
 
-    # 1. Keyword-based search
-    for kw in _ID_NUMBER_KEYWORDS:
-        idx = text_lower.find(kw)
-        if idx == -1:
-            continue
-        after = text_norm[idx + len(kw): idx + len(kw) + 50]
-        # Match digits-only or alphanumeric ID
-        m = re.search(r'[\s:]*([A-Z0-9]{5,12})', after.upper())
-        if m:
-            candidate = m.group(1)
-            if re.search(r'\d', candidate):
-                return candidate
-
-    # 2. Tunisian CIN: 8 clean digits, not a year (19xx/20xx) and not inside a date
-    # Scan Latin lines first (Latin OCR reads digits more accurately)
     latin_text = _normalise_digits(' '.join(latin_lines))
-    for m in re.finditer(r'\b(\d{8})\b', latin_text):
-        candidate = m.group(1)
-        # Skip year-like prefixes
-        if candidate[:4] in ('1900', '1901', '1902', '1903', '1904', '1905', '1906', '1907',
-                              '1908', '1909', '1910', '1920', '1930', '1940', '1950', '1960',
-                              '1970', '1971', '1972', '1973', '1974', '1975', '1976', '1977',
-                              '1978', '1979', '1980', '1981', '1982', '1983', '1984', '1985',
-                              '1986', '1987', '1988', '1989', '1990', '1991', '1992', '1993',
-                              '1994', '1995', '1996', '1997', '1998', '1999', '2000', '2001',
-                              '2002', '2003', '2004', '2005', '2006', '2007', '2008', '2009',
-                              '2010', '2011', '2012', '2013', '2014', '2015', '2016', '2017',
-                              '2018', '2019', '2020', '2021', '2022', '2023', '2024', '2025'):
-            continue
-        return candidate
+    latin_masked = _mask_non_id_numbers(latin_text)
 
-    # 3. Letter(s) + digits pattern (Moroccan CIN: B123456, AB123456, etc.)
-    m = re.search(r'\b([A-Z]{1,2}\d{5,9})\b', text_norm.upper())
-    if m:
-        return m.group(1)
+    # Pre-compute label keyword positions with word-boundary anchoring on
+    # alphanumeric edges (prevents 'cin' from matching inside 'principal').
+    keyword_hits: list[tuple[int, int, float]] = []
+    for kw in _ID_NUMBER_KEYWORDS:
+        prefix = r'\b' if kw[0].isalnum() else ''
+        suffix = r'\b' if kw[-1].isalnum() else ''
+        pat = prefix + re.escape(kw) + suffix
+        weight = 0.35 if ' ' in kw else 0.20
+        for m in re.finditer(pat, text_lower):
+            keyword_hits.append((m.start(), m.end(), weight))
 
-    return None
+    candidates: list[dict] = []
+
+    def add(value: str, pos: int, base_score: float) -> None:
+        if _looks_repetitive(value):
+            return
+        end_pos = pos + len(value)
+        # Closest label keyword within 40 chars contributes a proximity bonus
+        bonus = 0.0
+        for kw_start, kw_end, weight in keyword_hits:
+            if kw_end <= pos:
+                dist = pos - kw_end
+            elif kw_start >= end_pos:
+                dist = kw_start - end_pos
+            else:
+                continue
+            if dist <= 40:
+                bonus = max(bonus, weight * (1 - dist / 40))
+        score = base_score + bonus
+        # Phone-keyword penalty — only check the text IMMEDIATELY before the
+        # digit (a phone label like "tel:" sits right next to its number).
+        # A wider window would penalise the real CIN on the same line.
+        behind = text_lower[max(0, pos - 12): pos]
+        if value.isdigit() and any(pk in behind for pk in _PHONE_KEYWORDS):
+            score -= 0.40
+        candidates.append({'value': value, 'pos': pos, 'score': score})
+
+    # Pattern A — letter(s) + digits (Moroccan CIN, passports, European IDs)
+    for m in re.finditer(r'\b([A-Z]{1,2}\d{5,9})\b', masked_upper):
+        add(m.group(1), m.start(), 0.70)
+
+    # Pattern B — long digit-only IDs (Algerian NIN: 18 digits, etc.)
+    for m in re.finditer(r'(?<!\d)(\d{12,18})(?!\d)', masked):
+        add(m.group(1), m.start(), 0.70)
+
+    # Pattern C — 8-digit Tunisian CIN; Latin-OCR pass first (more reliable
+    # for digits than Arabic OCR). Includes year-prefixed values like
+    # 19xxxxxx and 20xxxxxx — date-masking already removed real dates.
+    seen_cin: set = set()
+    for m in re.finditer(r'(?<!\d)(\d{8})(?!\d)', latin_masked):
+        v = m.group(1)
+        full_pos = masked.find(v)
+        add(v, full_pos if full_pos != -1 else m.start(), 0.65)
+        seen_cin.add(v)
+    for m in re.finditer(r'(?<!\d)(\d{8})(?!\d)', masked):
+        if m.group(1) not in seen_cin:
+            add(m.group(1), m.start(), 0.55)
+
+    # Pattern D — medium-length digit IDs; need a nearby label to clear threshold
+    for m in re.finditer(r'(?<!\d)(\d{6,7}|\d{9,11})(?!\d)', masked):
+        add(m.group(1), m.start(), 0.40)
+
+    if not candidates:
+        return None
+
+    # Deduplicate by value, keeping the highest-scoring instance
+    best_by_value: dict = {}
+    for c in candidates:
+        cur = best_by_value.get(c['value'])
+        if cur is None or c['score'] > cur['score']:
+            best_by_value[c['value']] = c
+
+    best = max(best_by_value.values(), key=lambda c: c['score'])
+    if best['score'] < 0.50:
+        return None
+    return best['value']
 
 
 # ── Public entry point ─────────────────────────────────────────────────────────

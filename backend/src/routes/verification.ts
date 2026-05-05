@@ -4,6 +4,7 @@ import { AuthRequest, authenticate, optionalAuth } from '../middleware/auth';
 import { faceVerificationService } from '../services/faceVerificationService';
 import { faceCaptureLimiter } from '../middleware/security';
 import { saveBuffer } from '../services/uploadService';
+import { prisma } from '../config/db';
 import logger from '../utils/logger';
 
 const router = Router();
@@ -36,9 +37,18 @@ router.post(
         return res.status(400).json({ success: false, message: 'No image provided' });
       }
 
-      // Save selfie to uploads/face/ (non-blocking — don't fail the request)
+      // Save selfie to uploads/face/ and link it to the user via KycDocument
+      // so the admin's UserKycPreview page can render the selfie thumbnail.
+      // Non-blocking: ML embedding is the primary signal — file save is supplementary.
+      const userId = req.user?.id;
       saveBuffer(req.file.buffer, req.file.mimetype, 'face', `selfie_${Date.now()}`)
-        .catch((e) => logger.warn('Face selfie save failed', { error: String(e) }));
+        .then(async (url) => {
+          if (!userId) return;
+          await prisma.kycDocument.create({
+            data: { userId, documentType: 'SELFIE', frontUrl: url, status: 'PENDING' },
+          });
+        })
+        .catch((e) => logger.warn('Selfie save/link failed', { error: String(e) }));
 
       const result = await faceVerificationService.captureFace(
         req.file.buffer,
@@ -74,9 +84,21 @@ router.post(
         return res.status(400).json({ success: false, message: 'No image provided' });
       }
 
-      // Save ID document to uploads/face/ (non-blocking)
-      saveBuffer(req.file.buffer, req.file.mimetype, 'face', `id_${Date.now()}`)
-        .catch((e) => logger.warn('ID document save failed', { error: String(e) }));
+      // Save ID document to uploads/kyc/ and link it to the user via KycDocument
+      // so the admin's UserKycPreview page can render the document image and
+      // approve/reject it. Non-blocking: ML embedding is the primary signal.
+      const userId = req.user?.id;
+      const kycFilename = userId
+        ? `id_${userId}_${Date.now()}`
+        : `id_${Date.now()}`;
+      saveBuffer(req.file.buffer, req.file.mimetype, 'kyc', kycFilename)
+        .then(async (url) => {
+          if (!userId) return;
+          await prisma.kycDocument.create({
+            data: { userId, documentType: 'FRONT', frontUrl: url, status: 'PENDING' },
+          });
+        })
+        .catch((e) => logger.warn('KYC ID save/link failed', { error: String(e) }));
 
       const result = await faceVerificationService.uploadID(
         req.file.buffer,

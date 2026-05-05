@@ -1,0 +1,53 @@
+@startuml Sequence_Tracking_Delivery
+skinparam sequenceArrowThickness 1.5
+skinparam participantBackgroundColor #F8FAFF
+
+actor Traveler
+actor Receiver
+participant "App\nTraveler" as AT
+participant "Backend" as API
+participant "OpenSky\nAPI" as OS
+database "PostgreSQL" as DB
+participant "Socket.IO" as WS
+participant "Stripe Connect" as SC
+
+== Activation du suivi ==
+Traveler -> AT: Démarre le voyage (avion)
+AT -> API     : POST /tracking/activate {dealId, mode:"flight", flightCallsign}
+API -> DB     : prisma.trackingSession.upsert({mode:"flight"})
+API -> OS     : poll OpenSky every 30s
+loop Pendant le vol
+  OS --> API  : {lat, lng, alt, heading}
+  API -> DB   : prisma.positionLog.create()
+  API -> DB   : trackingSession.update(flight*)
+  API -> WS   : emit("position", {lat,lng}) → room deal:<id>
+end
+
+== Atterrissage et passage en GPS ==
+AT -> API     : POST /tracking/switch-mode {mode:"gps"}
+loop Trajet terrestre
+  AT -> API   : POST /tracking/gps-position {lat, lng}
+  API -> DB   : positionLog.create
+  API -> WS   : emit("position")
+end
+
+== Génération du QR code de ramassage ==
+note over API : (Réalisé à l'étape PICKED_UP)
+API -> API    : qrService.generateDealQR(dealId, secret)
+API -> DB     : deal.update({qrCode, qrSecret})
+
+== Confirmation de livraison ==
+Receiver -> AT: Saisit le code à 6 chiffres
+AT -> API     : POST /deals/receiver-verify {dealId, receiverCode, senderId}
+API -> DB     : findUnique(dealId)
+alt code OK et statut ∈ {IN_TRANSIT, PICKED_UP}
+  API -> DB   : $transaction([\n  deal.update(status:"COMPLETED"),\n  trackingEvent.create("DELIVERED"),\n  trackingEvent.create("COMPLETED")\n])
+  API -> SC   : transfers.create(travelerStripeAcct, amount)
+  SC --> API  : Transfer {id}
+  API -> DB   : transaction.create(type:"ESCROW_RELEASE")
+  API -> WS   : emit("deal:completed")
+  API --> AT  : 200 {verified:true}
+else
+  API --> AT  : 400 {error}
+end
+@enduml

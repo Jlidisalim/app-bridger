@@ -1,0 +1,79 @@
+@startuml Sequence_KYC
+skinparam sequenceArrowThickness 1.5
+skinparam participantBackgroundColor #F8FAFF
+skinparam participantBorderColor #1E3B8A
+skinparam noteBackgroundColor #FFFAEC
+
+actor "Utilisateur" as User
+participant "App Mobile\n(React Native)" as App
+participant "Backend\n(Express)" as API
+participant "Service Face\n(FastAPI)" as Face
+participant "Twilio Verify" as Twilio
+database "PostgreSQL" as DB
+database "Redis" as R
+
+== 1. Saisie du téléphone et envoi OTP ==
+User -> App  : Saisit +216 ...
+App  -> API  : POST /auth/otp/send {phone}
+API  -> R    : checkOtpLockout(phone)
+R --> API    : not locked
+API  -> Twilio : verifications.create\n(to, channel: sms|whatsapp)
+Twilio --> User : Message OTP\n(SMS ou WhatsApp)
+Twilio --> API : status: pending
+API --> App  : 200 {sent:true}
+
+== 2. Vérification de l'OTP ==
+User -> App  : Saisit le code à 6 chiffres
+App  -> API  : POST /auth/otp/verify {phone, code}
+API  -> Twilio : verificationChecks.create\n(to, code)
+alt status = approved
+  Twilio --> API : approved
+  API -> DB  : prisma.user.upsert({phone})
+  API -> DB  : prisma.session.create({token, refreshToken})
+  API --> App: 200 {accessToken, refreshToken, user}
+else status = pending / expired
+  Twilio --> API : pending
+  API -> R   : recordFailedOtpAttempt(phone)
+  API --> App: 401 {error}
+end
+
+== 3. Téléversement de la pièce d'identité ==
+User -> App  : Capture recto/verso
+App  -> Face : POST /verify/upload-id (multipart)
+Face -> Face : extractFaceFromDocument(img)
+Face -> Face : extractIdInfo(img) // OCR EasyOCR
+Face --> App : {embedding[512], id_number, birthday}
+App  -> API  : PATCH /users/me {idEmbedding, idNumber}
+API  -> DB   : prisma.kycDocument.create()
+
+== 4. Capture du selfie ==
+User -> App  : Selfie (caméra frontale)
+App  -> Face : POST /verify/capture-face
+Face -> Face : detectFaces() + validateImageQuality()
+alt qualité KO
+  Face --> App: {success:false, issues}
+else qualité OK
+  Face -> Face: checkLiveness(face_crop)
+  alt liveness KO
+    Face --> App: {success:false, message}
+  else liveness OK
+    Face -> Face: face.normed_embedding
+    Face --> App: {success:true, embedding[512]}
+  end
+end
+
+== 5. Comparaison cosinus ==
+App  -> Face : POST /verify/compare {face_emb, id_emb}
+Face -> Face : cosine(face, id)
+alt similarity ≥ 0.65
+  Face --> App: {result:APPROVED, verified:true}
+else ≥ 0.55
+  Face --> App: {result:MANUAL_REVIEW}
+else <0.55
+  Face --> App: {result:REJECTED}
+end
+App  -> API  : POST /users/me/face-verify {result, confidence}
+API  -> DB   : prisma.user.update({faceVerificationStatus, faceConfidenceScore})
+API  -> DB   : prisma.faceScan.create()
+API  -> DB   : prisma.auditLog.create({action:"KYC_VERIFY"})
+@enduml

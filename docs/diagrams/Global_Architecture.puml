@@ -1,0 +1,69 @@
+@startuml Global_Architecture
+skinparam componentStyle rectangle
+skinparam backgroundColor #FFFFFF
+skinparam component {
+  BackgroundColor #F8FAFF
+  BorderColor #1E3B8A
+}
+
+actor "Utilisateur\n(Sender / Traveler)" as User
+actor "Destinataire" as Receiver
+actor "Administrateur" as Admin
+
+node "Application Mobile\n(React Native + Expo SDK 54)" as Mobile {
+  [Écrans (47)]
+  [Store Zustand]
+  [Client Axios]
+  [Socket.IO Client]
+}
+
+node "Espace Admin\n(React + Vite + Tailwind)" as AdminApp {
+  [Dashboard]
+  [Gestion utilisateurs / KYC]
+  [Gestion litiges]
+  [Audit Log]
+}
+
+node "Backend Bridger\n(Express + TypeScript)" as Backend {
+  [Routes REST] as Rest
+  [Socket.IO Server] as IO
+  [Prisma ORM] as ORMlayer
+}
+
+database "PostgreSQL" as PG
+database "Redis" as Rds
+
+cloud "Microservice IA\n(Python FastAPI)" as ML {
+  [InsightFace\n(RetinaFace + ArcFace)]
+  [EasyOCR]
+  [XGBoost]
+  [XLM-RoBERTa]
+}
+
+cloud "Twilio Verify" as Twilio
+cloud "Stripe + Stripe Connect" as Stripe
+cloud "OpenSky API" as Sky
+cloud "FCM / APNs" as Push
+cloud "Cloudinary" as Cloud
+cloud "Sentry" as Sentry
+
+User    --> Mobile     : utilise
+Receiver --> Mobile    : saisit le code\nde livraison
+Admin   --> AdminApp   : modère
+
+Mobile  --> Backend    : HTTPS / WSS
+AdminApp--> Backend    : HTTPS (JWT admin)
+
+Rest    --> ORMlayer
+IO      --> ORMlayer
+ORMlayer --> PG
+Backend --> Rds
+Backend --> ML        : HTTP interne\n(X-Service-Key)
+Backend --> Twilio    : OTP SMS / WhatsApp
+Backend --> Stripe    : paiements + webhooks
+Backend --> Sky       : tracking aérien
+Backend --> Push      : notifications
+Mobile  --> Cloud     : avatars, photos
+Backend --> Sentry    : erreurs / traces
+
+@enduml

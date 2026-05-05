@@ -1,0 +1,40 @@
+@startuml Sequence_Dispute
+skinparam sequenceArrowThickness 1.5
+
+actor Filer
+actor Admin
+participant "App" as App
+participant "Backend" as API
+participant "Service IA\n(Sentiment)" as ML
+database "PostgreSQL" as DB
+
+Filer -> App  : Ouvre un litige (perdu, endommagé...)
+App -> API    : POST /disputes {dealId, reason, description}
+API -> DB     : prisma.dispute.create({status:"OPENED", slaDeadline:NOW+72h})
+API -> DB     : disputeTimelineEvent.create({eventType:"OPENED"})
+
+== Soumission de preuves ==
+Filer -> App  : Téléverse photos/vidéos
+App -> API    : POST /disputes/:id/evidence (multipart)
+API -> DB     : disputeEvidence.create
+API -> DB     : dispute.update({status:"EVIDENCE_SUBMITTED"})
+API -> DB     : disputeTimelineEvent.create({eventType:"EVIDENCE_ADDED"})
+
+== Médiation ==
+Admin -> API  : POST /disputes/:id/mediator
+API -> DB     : adminTask.update(assignedTo)
+Admin -> API  : POST /disputes/:id/messages
+API -> DB     : disputeMessage.create
+
+== Analyse ML des messages (asynchrone) ==
+API -> ML     : POST /predict/sentiment
+ML --> API    : {label, fraud_signals}
+
+== Résolution ==
+Admin -> API  : PATCH /disputes/:id/resolve {outcome:"FILER_WIN"}
+API -> DB     : dispute.update({status:"RESOLVED_FILER_WIN"})
+API -> DB     : trustScore.recompute(both parties)
+API -> API    : escrowService.refundEscrowToSender()
+API -> DB     : disputeTimelineEvent.create({eventType:"RESOLVED"})
+API -> DB     : auditLog.create({action:"DISPUTE_RESOLVED"})
+@enduml

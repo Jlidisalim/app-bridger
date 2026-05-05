@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, CheckCircle, X, AlertTriangle, ShieldCheck, ChevronDown, Loader2, AlertCircle, FileText, MapPin, User as UserIcon, Camera, ExternalLink } from 'lucide-react'
-import api from '../services/api'
+import api, { resolveMediaUrl } from '../services/api'
 
 // Document-type grouping. Anything not matched falls under "Other".
 const DOC_TYPE_META = {
@@ -291,8 +291,8 @@ export default function UserKycPreview() {
                         <div className="grid grid-cols-2 gap-3">
                           <DocCard title="Front" bg="bg-slate-100">
                             {doc.frontUrl ? (
-                              <a href={doc.frontUrl} target="_blank" rel="noreferrer">
-                                <img src={doc.frontUrl} alt={`${meta.label} front`} className="max-h-32 max-w-full object-contain rounded-lg" />
+                              <a href={resolveMediaUrl(doc.frontUrl)} target="_blank" rel="noreferrer">
+                                <img src={resolveMediaUrl(doc.frontUrl)} alt={`${meta.label} front`} className="max-h-32 max-w-full object-contain rounded-lg" />
                               </a>
                             ) : (
                               <div className="text-xs text-on-surface-variant">No image</div>
@@ -300,8 +300,8 @@ export default function UserKycPreview() {
                           </DocCard>
                           <DocCard title="Back" bg="bg-slate-100">
                             {doc.backUrl ? (
-                              <a href={doc.backUrl} target="_blank" rel="noreferrer">
-                                <img src={doc.backUrl} alt={`${meta.label} back`} className="max-h-32 max-w-full object-contain rounded-lg" />
+                              <a href={resolveMediaUrl(doc.backUrl)} target="_blank" rel="noreferrer">
+                                <img src={resolveMediaUrl(doc.backUrl)} alt={`${meta.label} back`} className="max-h-32 max-w-full object-contain rounded-lg" />
                               </a>
                             ) : (
                               <div className="text-xs text-on-surface-variant">N/A</div>
@@ -322,8 +322,8 @@ export default function UserKycPreview() {
               </h3>
               <div className="bg-surface-container-low rounded-xl p-4 flex items-start gap-5">
                 {selfieDocs[0]?.frontUrl ? (
-                  <a href={selfieDocs[0].frontUrl} target="_blank" rel="noreferrer">
-                    <img src={selfieDocs[0].frontUrl} alt="Selfie" className="w-20 h-24 rounded-xl object-cover flex-shrink-0" />
+                  <a href={resolveMediaUrl(selfieDocs[0].frontUrl)} target="_blank" rel="noreferrer">
+                    <img src={resolveMediaUrl(selfieDocs[0].frontUrl)} alt="Selfie" className="w-20 h-24 rounded-xl object-cover flex-shrink-0" />
                   </a>
                 ) : (
                   <div className="w-20 h-24 bg-slate-200 rounded-xl flex items-center justify-center flex-shrink-0">
@@ -367,8 +367,8 @@ export default function UserKycPreview() {
                     return (
                       <DocCard key={doc.id} title={meta.label} bg="bg-slate-100">
                         {doc.frontUrl ? (
-                          <a href={doc.frontUrl} target="_blank" rel="noreferrer">
-                            <img src={doc.frontUrl} alt={meta.label} className="max-h-28 max-w-full object-contain rounded-lg" />
+                          <a href={resolveMediaUrl(doc.frontUrl)} target="_blank" rel="noreferrer">
+                            <img src={resolveMediaUrl(doc.frontUrl)} alt={meta.label} className="max-h-28 max-w-full object-contain rounded-lg" />
                           </a>
                         ) : (
                           <div className="text-xs text-on-surface-variant">No image</div>
