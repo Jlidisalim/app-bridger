@@ -32,10 +32,12 @@ def _get_reader_latin():
     global _reader_latin
     if _reader_latin is None:
         import easyocr
-        _reader_latin = easyocr.Reader(
-            ['en', 'fr', 'es', 'pt', 'de', 'nl', 'it', 'tr'],
-            gpu=False, verbose=False
-        )
+        # Languages MUST match what the Dockerfile pre-downloads (en+fr).
+        # On Azure the container has no usable network egress for EasyOCR's
+        # model CDN at runtime, so any language not baked into the image
+        # silently fails to load and the reader returns nothing — which
+        # is what made id_number/birthday come back null in production.
+        _reader_latin = easyocr.Reader(['en', 'fr'], gpu=False, verbose=False)
         logger.info("EasyOCR Latin reader loaded")
     return _reader_latin
 
