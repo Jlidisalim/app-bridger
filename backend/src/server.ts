@@ -99,8 +99,15 @@ app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 // On Azure App Service, UPLOADS_DIR should be set to /home/data/uploads so
 // the files persist across deploys (everything under wwwroot is wiped on
 // each deploy). Falls back to backend/uploads/ for local development.
+// helmet sets `Cross-Origin-Resource-Policy: same-origin` by default, which
+// blocks the admin SPA (different origin) from loading these files via <img>.
+// Override to `cross-origin` so admin/mobile clients can render images inline.
 app.use(
   '/uploads',
+  (_req, res, next) => {
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    next();
+  },
   express.static(process.env.UPLOADS_DIR || path.join(__dirname, '../uploads'))
 );
 
