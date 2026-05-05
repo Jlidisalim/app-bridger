@@ -11,8 +11,7 @@ import {
     Image,
     Modal,
     TextInput,
-    ActivityIndicator,
-    Platform } from 'react-native';
+    ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACING, RADIUS } from '../theme/theme';
 import { Typography } from '../components/Typography';
@@ -96,7 +95,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onHome, onExplore,
     const [stats, setStats] = useState<{ completionRate: number; totalDeals: number; rating: number } | null>(null);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [deletePhrase, setDeletePhrase] = useState('');
-    const [deletePassword, setDeletePassword] = useState('');
     const [deleteAcknowledged, setDeleteAcknowledged] = useState(false);
     const [deleteSubmitting, setDeleteSubmitting] = useState(false);
     const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -195,7 +193,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onHome, onExplore,
 
     const resetDeleteState = () => {
         setDeletePhrase('');
-        setDeletePassword('');
         setDeleteAcknowledged(false);
         setDeleteError(null);
         setDeleteSubmitting(false);
@@ -222,7 +219,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onHome, onExplore,
             const res = await apiClient.delete<{ success: boolean; deletedAt?: string; error?: string }>('/users/me', {
                 confirm: DELETE_CONFIRMATION_PHRASE,
                 acknowledge: true,
-                otp: deletePassword || undefined,
             });
             if (!res.success) {
                 setDeleteError(res.error || 'Account deletion failed. Please try again.');
@@ -445,21 +441,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onHome, onExplore,
                             placeholder={DELETE_CONFIRMATION_PHRASE}
                             placeholderTextColor={COLORS.background.slate[300]}
                             editable={!deleteSubmitting}
-                        />
-
-                        <Typography size="xs" weight="bold" color={COLORS.background.slate[500]} uppercase tracking={1} style={styles.fieldLabel}>
-                            One-time SMS code (optional)
-                        </Typography>
-                        <TextInput
-                            style={styles.input}
-                            value={deletePassword}
-                            onChangeText={setDeletePassword}
-                            keyboardType="number-pad"
-                            maxLength={6}
-                            placeholder="6-digit code"
-                            placeholderTextColor={COLORS.background.slate[300]}
-                            editable={!deleteSubmitting}
-                            secureTextEntry={Platform.OS === 'ios' ? false : true}
                         />
 
                         <TouchableOpacity

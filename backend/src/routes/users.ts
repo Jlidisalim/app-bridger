@@ -9,7 +9,6 @@ import { updateProfileSchema, updatePushTokenSchema } from '../validators/auth';
 import { prisma } from '../config/db';
 import { notifyAdminNewDispute } from '../services/adminNotificationService';
 import { saveBuffer, saveRawBuffer } from '../services/uploadService';
-import { verifyOTP } from '../services/otpService';
 import logger from '../utils/logger';
 
 // Multer: store in memory, validate MIME type, enforce 10MB limit
@@ -454,17 +453,14 @@ const DELETE_PHRASE = 'DELETE';
 const BLOCKING_DEAL_STATES = ['MATCHED', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED', 'DISPUTED'];
 
 // DELETE /users/me — Permanently delete the current user.
-// Body: { confirm: "DELETE", acknowledge: true, otp?: "123456" }
+// Body: { confirm: "DELETE", acknowledge: true }
 //
 // Workflow:
 //   1. Validate confirmation phrase and explicit acknowledgement.
-//   2. (Optional but recommended) re-verify ownership of the phone number
-//      by checking a freshly issued OTP.  Skipped if the env flag
-//      REQUIRE_OTP_FOR_DELETE is "false" — useful for tests.
-//   3. Refuse if the user has open deals/disputes that affect counterparties.
-//   4. Refuse if the wallet has a non-zero balance (forces explicit withdrawal
+//   2. Refuse if the user has open deals/disputes that affect counterparties.
+//   3. Refuse if the wallet has a non-zero balance (forces explicit withdrawal
 //      first to avoid silently torching user funds).
-//   5. Inside a single transaction:
+//   4. Inside a single transaction:
 //        a) sanitise PII on the User row (name, email, avatar, push token,
 //           face embedding, KYC status, ID document number) so the soft-tomb-
 //           stoned row leaks nothing if recoverable from backups.
@@ -475,10 +471,10 @@ const BLOCKING_DEAL_STATES = ['MATCHED', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED',
 //           cannot lawfully erase counter-party records.  Counterparty-facing
 //           views show "Deleted user" instead.
 //        d) finally `prisma.user.delete()` cascades the rest per schema rules.
-//   6. Write an AuditLog entry capturing who, when, and from where.
+//   5. Write an AuditLog entry capturing who, when, and from where.
 router.delete('/me', authenticate, deleteAccountLimiter, async (req: any, res, next) => {
   try {
-    const { confirm, acknowledge, otp } = req.body || {};
+    const { confirm, acknowledge } = req.body || {};
 
     // ── Step 1: confirmation gating ────────────────────────────────────────
     if (typeof confirm !== 'string' || confirm.trim().toUpperCase() !== DELETE_PHRASE) {
@@ -497,28 +493,7 @@ router.delete('/me', authenticate, deleteAccountLimiter, async (req: any, res, n
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // ── Step 2: re-prove phone-number ownership via OTP ────────────────────
-    // Some operators run without an SMS provider in dev — they can opt out by
-    // setting REQUIRE_OTP_FOR_DELETE=false in their .env.  Never disable in prod.
-    const otpRequired = (process.env.REQUIRE_OTP_FOR_DELETE ?? 'true') !== 'false';
-    if (otpRequired) {
-      if (!otp || typeof otp !== 'string') {
-        return res.status(400).json({
-          error: 'A current SMS verification code is required to delete your account.',
-          requiresOtp: true,
-        });
-      }
-      try {
-        const ok = await verifyOTP(user.phone, otp);
-        if (!ok) {
-          return res.status(401).json({ error: 'Invalid verification code.' });
-        }
-      } catch (e: any) {
-        return res.status(401).json({ error: e?.message || 'Verification failed.' });
-      }
-    }
-
-    // ── Step 3: refuse while obligations to counterparties remain ──────────
+    // ── Step 2: refuse while obligations to counterparties remain ──────────
     const openDeals = await prisma.deal.count({
       where: {
         OR: [{ senderId: user.id }, { travelerId: user.id }],
@@ -545,7 +520,7 @@ router.delete('/me', authenticate, deleteAccountLimiter, async (req: any, res, n
       });
     }
 
-    // ── Step 4: refuse while funds remain ──────────────────────────────────
+    // ── Step 3: refuse while funds remain ──────────────────────────────────
     const wallet = await prisma.wallet.findUnique({ where: { userId: user.id } });
     const liveBalance = (wallet?.availableBalance ?? wallet?.balance ?? user.walletBalance ?? 0)
                       + (wallet?.pendingBalance ?? 0);
@@ -568,7 +543,7 @@ router.delete('/me', authenticate, deleteAccountLimiter, async (req: any, res, n
       faceVerificationStatus: user.faceVerificationStatus,
     });
 
-    // ── Step 5: atomic sanitise + tombstone ────────────────────────────────
+    // ── Step 4: atomic sanitise + tombstone ────────────────────────────────
     // We do NOT `prisma.user.delete()` because Deal.sender / Dispute.filer /
     // Dispute.against are configured with `onDelete: Restrict` for legal /
     // audit reasons — the counterparty's history must remain intact.  Instead
