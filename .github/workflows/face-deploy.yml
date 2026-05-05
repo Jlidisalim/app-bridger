@@ -43,21 +43,27 @@ jobs:
           context: ./face-verification-service
           file: ./face-verification-service/Dockerfile
           push: true
-          tags: bridgeracr29792.azurecr.io/bridger-face:v1
+          # Tag with both the commit SHA and :latest. The SHA tag forces
+          # Azure to pull a brand-new digest on every deploy (otherwise it
+          # treats reusing :v1 as an unchanged image and serves cached
+          # bytes — which is what bit us with the NumPy fix not landing).
+          tags: |
+            bridgeracr29792.azurecr.io/bridger-face:${{ github.sha }}
+            bridgeracr29792.azurecr.io/bridger-face:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      
+
       - name: Login to Azure
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-      
+
       - name: Configure Web App for Container
         run: |
           az webapp config container set \
             --name bridger-face \
             --resource-group bridger-prod \
-            --container-image-name "bridgeracr29792.azurecr.io/bridger-face:v1" \
+            --container-image-name "bridgeracr29792.azurecr.io/bridger-face:${{ github.sha }}" \
             --container-registry-url "https://bridgeracr29792.azurecr.io" \
             --container-registry-user "${{ secrets.ACR_USERNAME }}" \
             --container-registry-password "${{ secrets.ACR_PASSWORD }}"
