@@ -181,7 +181,7 @@ export const faceVerificationService = {
       const response = await axios.post<IDUploadResult>(
         `${FACE_API}/verify/upload-id`,
         form,
-        { headers: form.getHeaders(), timeout: 120000 }  // 2 min — OCR can be slow
+        { headers: form.getHeaders(), timeout: 180000 }  // 3 min — cold-start before EasyOCR readers warm up can take ~60 s
       );
 
       const data = response.data;

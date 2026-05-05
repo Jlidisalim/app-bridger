@@ -112,6 +112,12 @@ export const faceVerificationAPI = {
 
   /**
    * Upload ID document for face extraction.
+   *
+   * The 3-minute timeout is intentional: the Python OCR pipeline
+   * (InsightFace face detection + EasyOCR Arabic + Latin passes)
+   * can take 30-60 s on a cold container and 5-15 s when warm. The
+   * default 60 s timeout caused AbortError on the first upload after
+   * an Azure deploy.
    */
   async uploadID(imageUri: string): Promise<IDUploadResponse> {
     const headers = await getAuthHeaders();
@@ -127,7 +133,7 @@ export const faceVerificationAPI = {
       method: 'POST',
       headers,
       body: formData,
-    });
+    }, 180000);
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
