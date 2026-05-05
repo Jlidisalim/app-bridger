@@ -36,6 +36,10 @@ jobs:
             "dependencies": { "serve": "^14.2.4" }
           }
           EOF
+          cat > .deployment <<'EOF'
+          [config]
+          SCM_DO_BUILD_DURING_DEPLOYMENT=false
+          EOF
           npm install --omit=dev
 
       - name: Zip artifact
