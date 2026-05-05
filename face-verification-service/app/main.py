@@ -253,10 +253,6 @@ async def upload_id(request: Request, image: UploadFile = File(...)):
                 ocr_info.get("id_number"), ocr_info.get("birthday"),
                 (ocr_info.get("raw_text") or "")[:200])
 
-    debug_payload = (ocr_info.get("raw_text") or "")[:300]
-    if ocr_info.get("errors"):
-        debug_payload = f"[errors={ocr_info['errors']}] {debug_payload}"
-
     return IDUploadResponse(
         success=True,
         message="Face extracted from document successfully",
@@ -265,7 +261,6 @@ async def upload_id(request: Request, image: UploadFile = File(...)):
         document_face_bbox=result["bbox"],
         id_number=ocr_info.get("id_number"),
         birthday=ocr_info.get("birthday"),
-        ocr_debug=debug_payload,
     )
 
 

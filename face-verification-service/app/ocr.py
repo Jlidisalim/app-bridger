@@ -421,8 +421,7 @@ def extract_id_info(image: np.ndarray) -> dict:
     Name and last name are entered manually by the user (not OCR-extracted).
     Never raises — returns None values on failure.
     """
-    _empty = {'id_number': None, 'birthday': None, 'raw_text': '', 'errors': []}
-    errors: list[str] = []
+    _empty = {'id_number': None, 'birthday': None, 'raw_text': ''}
     try:
         arabic_bbox:  list = []   # (bbox, text, conf) with bounding boxes
         arabic_lines: list = []
@@ -433,22 +432,17 @@ def extract_id_info(image: np.ndarray) -> dict:
             arabic_lines = [_normalise_digits(r[1].strip()) for r in arabic_bbox if r[1].strip()]
             logger.debug("OCR Arabic lines: %s", arabic_lines)
         except Exception as e:
-            msg = f"arabic_pass: {type(e).__name__}: {e}"
-            logger.warning("OCR Arabic pass failed: %s", msg)
-            errors.append(msg)
+            logger.warning("OCR Arabic pass failed: %s: %s", type(e).__name__, e)
 
         try:
             results = _get_reader_latin().readtext(image, detail=0, paragraph=False)
             latin_lines = [_normalise_digits(r.strip()) for r in results if r.strip()]
             logger.debug("OCR Latin lines: %s", latin_lines)
         except Exception as e:
-            msg = f"latin_pass: {type(e).__name__}: {e}"
-            logger.warning("OCR Latin pass failed: %s", msg)
-            errors.append(msg)
+            logger.warning("OCR Latin pass failed: %s: %s", type(e).__name__, e)
 
         if not arabic_lines and not latin_lines:
-            logger.warning("Both OCR passes returned no text  errors=%s", errors)
-            _empty['errors'] = errors
+            logger.warning("Both OCR passes returned no text")
             return _empty
 
         # Merge: Latin first (better keyword labels), then Arabic
