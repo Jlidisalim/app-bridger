@@ -102,12 +102,17 @@ api.interceptors.response.use(
   }
 )
 
-// Resolve a relative /uploads/... path to a full backend URL.
-// Cloudinary / absolute URLs are returned unchanged.
+// Resolve any backend-served upload URL to one anchored at the current
+// API host. Re-anchoring (rather than passing absolute URLs through) makes
+// the admin resilient to drift in stored URLs — e.g. files persisted with
+// a `http://localhost:8080` prefix before SERVER_URL was configured, or
+// after the API host changes. Anything not under `/uploads/` is left alone
+// so external assets (Cloudinary, etc.) still pass through untouched.
 export function resolveMediaUrl(url) {
   if (!url) return null
+  const idx = url.indexOf('/uploads/')
+  if (idx >= 0) return `${BASE_URL}${url.slice(idx)}`
   if (url.startsWith('http://') || url.startsWith('https://')) return url
-  if (url.startsWith('/uploads/')) return `${BASE_URL}${url}`
   return url
 }
 
