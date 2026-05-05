@@ -5,7 +5,8 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  StatusBar } from 'react-native';
+  StatusBar,
+  Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACING, RADIUS } from '../theme/theme';
 import { Typography } from '../components/Typography';
@@ -20,6 +21,7 @@ import {
   XCircle,
 } from 'lucide-react-native';
 import { useAppStore } from '../store/useAppStore';
+import { userApi } from '../services/api';
 
 interface PersonalInfoScreenProps {
   onContinue: () => void;
@@ -97,6 +99,7 @@ export const PersonalInfoScreen: React.FC<PersonalInfoScreenProps> = ({
   const [firstNameError, setFirstNameError] = useState('');
   const [lastNameError,  setLastNameError]  = useState('');
   const [birthdayError,  setBirthdayError]  = useState('');
+  const [submitting,     setSubmitting]     = useState(false);
 
   // Run birthday validation on mount so pre-filled value shows correct state
   useEffect(() => {
@@ -122,7 +125,7 @@ export const PersonalInfoScreen: React.FC<PersonalInfoScreenProps> = ({
 
   // ── Continue ──────────────────────────────────────────────────
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     const fnErr = checkFirstName(firstName);
     const lnErr = checkLastName(lastName);
     const bdErr = checkBirthday(birthday, extractedBirthday);
@@ -132,10 +135,23 @@ export const PersonalInfoScreen: React.FC<PersonalInfoScreenProps> = ({
     if (fnErr || lnErr || bdErr) return;
 
     const fullName = `${firstName.trim()} ${lastName.trim()}`;
+
+    setSubmitting(true);
+    const res = await userApi.updateProfile({ name: fullName });
+    setSubmitting(false);
+
+    if (!res.success) {
+      Alert.alert(
+        'Could not save your name',
+        res.error || 'Please check your connection and try again.'
+      );
+      return;
+    }
+
     const user = currentUser
       ? { ...currentUser, name: fullName }
       : {
-          id: '0',
+          id: (res.data as any)?.id ?? '0',
           name: fullName,
           phone,
           verified: false,
@@ -313,9 +329,9 @@ export const PersonalInfoScreen: React.FC<PersonalInfoScreenProps> = ({
         ) : null}
 
         <Button
-          label="Confirm & Continue"
+          label={submitting ? 'Saving…' : 'Confirm & Continue'}
           onPress={handleContinue}
-          disabled={!isValid}
+          disabled={!isValid || submitting}
           style={styles.button}
         />
 
