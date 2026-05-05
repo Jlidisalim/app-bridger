@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import StatusBadge from '../components/shared/StatusBadge'
 import ConfirmModal from '../components/shared/ConfirmModal'
+import Pagination from '../components/shared/Pagination'
 import api from '../services/api'
 
 const STATUS_MAP = {

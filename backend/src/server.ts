@@ -332,6 +332,11 @@ async function main() {
       logger.warn('restoreActiveFlightPolls failed', { error: String(e) }),
     );
 
+    // Hourly cleanup: permanently delete trips whose departure date
+    // expired 5+ days ago and that never reached MATCHED / COMPLETED.
+    const { startTripCleanupJob } = await import('./services/tripCleanupJob');
+    startTripCleanupJob();
+
     httpServer.listen(PORT, () => {
       logger.info(`Server running on port ${PORT}`);
     });

@@ -12,11 +12,14 @@
  * - Loading and error states added.
  */
 import { useState, useEffect } from 'react'
+import { useSearchParams, Link } from 'react-router-dom'
 import {
   MessageSquare, Mail, Flag, ShieldCheck, Trash2, EyeOff,
   AlertTriangle, ChevronDown, Clock, CheckCircle2, Loader2, AlertCircle, Gavel,
+  Package, MapPin, X,
 } from 'lucide-react'
 import ConfirmModal from '../components/shared/ConfirmModal'
+import RiskBadge from '../components/shared/RiskBadge'
 import api from '../services/api'
 
 const ACTION_BADGE = {
@@ -226,6 +229,91 @@ function ReportCard({ report, onAction }) {
   )
 }
 
+// Renders when the user lands here from a shipment "Risk Card" (Shipments page
+// passes ?dealId=…). The panel pulls the deal and shows the exact context the
+// user was looking at, so navigation never feels like a context switch.
+function ShipmentRiskFocusPanel({ dealId, source, onClear }) {
+  const [deal, setDeal] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    setDeal(null)
+    api.get(`/deals/${dealId}`)
+      .then(r => { if (!cancelled) setDeal(r.data) })
+      .catch(err => { if (!cancelled) setError(err.response?.data?.error || 'Failed to load shipment.') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [dealId])
+
+  const score = deal?.mlScore != null ? Math.round(deal.mlScore) : null
+
+  return (
+    <div className="bg-surface-container-lowest rounded-xl shadow-card border-l-4 border-red-500 border-y border-r border-surface-container p-4 mb-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3 min-w-0">
+          <div className="w-9 h-9 rounded-lg bg-red-100 flex items-center justify-center flex-shrink-0">
+            <Package className="w-4 h-4 text-red-600" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-[10px] font-bold tracking-[0.15em] uppercase text-on-surface-variant/70">
+                Risk focus · shipment #{dealId.slice(-8)}
+              </p>
+              {source === 'shipments' && (
+                <Link
+                  to="/shipments"
+                  className="text-[10px] font-semibold text-primary hover:underline"
+                  title="Go back to Shipments"
+                >
+                  ← back to Shipments
+                </Link>
+              )}
+            </div>
+            {loading && (
+              <div className="flex items-center gap-2 mt-1 text-xs text-on-surface-variant">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading shipment context…
+              </div>
+            )}
+            {error && (
+              <div className="flex items-center gap-2 mt-1 text-xs text-red-700">
+                <AlertCircle className="w-3.5 h-3.5" /> {error}
+              </div>
+            )}
+            {deal && (
+              <>
+                <h3 className="text-base font-semibold text-on-surface mt-0.5 flex items-center gap-2 truncate">
+                  <MapPin className="w-4 h-4 text-primary flex-shrink-0" />
+                  <span className="truncate">{deal.fromCity ?? '—'} → {deal.toCity ?? '—'}</span>
+                </h3>
+                <p className="text-xs text-on-surface-variant mt-0.5">
+                  Sender: <strong className="text-on-surface">{deal.sender?.name ?? 'Unknown'}</strong>
+                  {deal.traveler?.name && <> · Traveler: <strong className="text-on-surface">{deal.traveler.name}</strong></>}
+                  {deal.status && <> · Status: <strong className="text-on-surface">{deal.status}</strong></>}
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {score != null && <RiskBadge score={score} />}
+          <button
+            onClick={onClear}
+            className="p-1.5 rounded-lg hover:bg-surface-container-high text-on-surface-variant"
+            title="Clear focus"
+            aria-label="Clear risk focus"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function ContentModeration() {
   const [reports,    setReports]   = useState([])
   const [auditLog,   setAuditLog]  = useState([])
@@ -233,6 +321,18 @@ export default function ContentModeration() {
   const [confirm,    setConfirm]   = useState(null)
   const [loading,    setLoading]   = useState(true)
   const [error,      setError]     = useState(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  // Inbound deep-link from a shipment Risk Card. dealId is the canonical handle
+  // for the focused shipment; focus/source are kept around for analytics &
+  // breadcrumbs but never required for the panel to render.
+  const focusedDealId = searchParams.get('dealId')
+  const focusSource   = searchParams.get('source')
+
+  function clearFocus() {
+    const next = new URLSearchParams(searchParams)
+    next.delete('dealId'); next.delete('focus'); next.delete('source')
+    setSearchParams(next, { replace: true })
+  }
 
   // Fetch queue and audit data from /admin/moderation on mount
   useEffect(() => {
@@ -297,6 +397,15 @@ export default function ContentModeration() {
         <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 mb-4">
           <AlertCircle className="w-4 h-4 flex-shrink-0" /><span>{error}</span>
         </div>
+      )}
+
+      {/* Focused shipment context — rendered when arriving from a Risk Card */}
+      {focusedDealId && (
+        <ShipmentRiskFocusPanel
+          dealId={focusedDealId}
+          source={focusSource}
+          onClear={clearFocus}
+        />
       )}
 
       <div className="grid grid-cols-[1fr_300px] gap-5">

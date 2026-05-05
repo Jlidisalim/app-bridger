@@ -14,9 +14,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  UserPlus, Star, CheckCircle, Clock, X, ChevronDown,
-  Search, MessageSquare, Eye, AlertTriangle, Users,
-  Loader2, AlertCircle, Ban,
+  ShieldCheck, Star, CheckCircle, Clock, X, ChevronDown,
+  Search, History, Eye, AlertTriangle, Users, UserPlus,
+  Loader2, AlertCircle, Ban, Mail, Phone as PhoneIcon, MessageCircle,
 } from 'lucide-react'
 import KpiCard from '../components/shared/KpiCard'
 import StatusBadge from '../components/shared/StatusBadge'
@@ -196,6 +196,14 @@ function UserDrawer({ user, onClose, onAction, onKycAction }) {
               >
                 Warn User
               </button>
+              {user.isAdmin && (
+                <button
+                  onClick={() => onAction(user, 'demote')}
+                  className="py-2.5 text-sm font-semibold border border-purple-300 text-purple-700 rounded-xl hover:bg-purple-50 transition-colors flex items-center justify-center gap-2"
+                >
+                  <ShieldCheck className="w-4 h-4" /> Revoke Admin
+                </button>
+              )}
               {user.banned ? (
                 <button
                   onClick={() => onAction(user, 'unban')}
@@ -250,32 +258,29 @@ function StatusDistribution({ data, loading }) {
   const total = data.reduce((s, d) => s + d.value, 0)
 
   return (
-    <div className="bg-surface-container-lowest rounded-xl shadow-card border border-surface-container p-4 h-full">
-      <div className="flex items-center justify-between mb-2">
-        <div>
-          <p className="text-[11px] font-semibold tracking-widest uppercase text-on-surface-variant">User Status Distribution</p>
-          <p className="text-xs text-on-surface-variant/70 mt-0.5">Breakdown across all KYC and ban states</p>
-        </div>
-        <Users className="w-4 h-4 text-on-surface-variant/60" />
+    <div className="bg-surface-container-lowest rounded-xl shadow-card border border-surface-container p-3 h-full flex flex-col">
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-[10px] font-semibold tracking-widest uppercase text-on-surface-variant truncate">Status Distribution</p>
+        <Users className="w-3.5 h-3.5 text-on-surface-variant/60 flex-shrink-0" />
       </div>
 
       {loading ? (
-        <div className="h-[160px] flex items-center justify-center">
-          <Loader2 className="w-5 h-5 animate-spin text-primary opacity-50" />
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="w-4 h-4 animate-spin text-primary opacity-50" />
         </div>
       ) : total === 0 ? (
-        <div className="h-[160px] flex items-center justify-center text-xs text-on-surface-variant">No data</div>
+        <div className="flex-1 flex items-center justify-center text-[11px] text-on-surface-variant">No data</div>
       ) : (
-        <div className="flex items-center gap-3">
-          <div className="relative w-[140px] h-[140px] flex-shrink-0">
+        <div className="flex items-center gap-2 flex-1">
+          <div className="relative w-[78px] h-[78px] flex-shrink-0">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={data}
                   dataKey="value"
                   nameKey="name"
-                  innerRadius={42}
-                  outerRadius={62}
+                  innerRadius={24}
+                  outerRadius={36}
                   paddingAngle={2}
                   stroke="none"
                 >
@@ -284,26 +289,23 @@ function StatusDistribution({ data, loading }) {
                   ))}
                 </Pie>
                 <Tooltip
-                  contentStyle={{ borderRadius: 8, fontSize: 12, border: '1px solid #E2E8F0' }}
+                  contentStyle={{ borderRadius: 8, fontSize: 11, border: '1px solid #E2E8F0' }}
                   formatter={(v, n) => [`${v} (${total ? Math.round((v / total) * 100) : 0}%)`, n]}
                 />
               </PieChart>
             </ResponsiveContainer>
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-              <p className="text-lg font-bold text-on-surface leading-none">{total.toLocaleString()}</p>
-              <p className="text-[10px] text-on-surface-variant mt-0.5">Total</p>
+              <p className="text-sm font-bold text-on-surface leading-none">{total.toLocaleString()}</p>
             </div>
           </div>
-          <ul className="flex-1 space-y-1.5 text-xs">
+          <ul className="flex-1 min-w-0 grid grid-cols-1 gap-y-0.5 text-[10px] leading-tight">
             {data.map(d => (
-              <li key={d.name} className="flex items-center justify-between">
-                <span className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-sm" style={{ background: STATUS_COLORS[d.name] || '#CBD5E1' }} />
-                  <span className="text-on-surface-variant">{d.name}</span>
+              <li key={d.name} className="flex items-center justify-between gap-1.5">
+                <span className="flex items-center gap-1 min-w-0">
+                  <span className="w-1.5 h-1.5 rounded-sm flex-shrink-0" style={{ background: STATUS_COLORS[d.name] || '#CBD5E1' }} />
+                  <span className="text-on-surface-variant truncate">{d.name}</span>
                 </span>
-                <span className="font-semibold text-on-surface tabular-nums">
-                  {d.value} <span className="text-on-surface-variant/60 font-normal">({total ? Math.round((d.value / total) * 100) : 0}%)</span>
-                </span>
+                <span className="font-semibold text-on-surface tabular-nums flex-shrink-0">{d.value}</span>
               </li>
             ))}
           </ul>
@@ -430,8 +432,187 @@ function BanUserModal({ user, onClose, onConfirm, saving }) {
   )
 }
 
+// ── Admin Onboarding Modal ───────────────────────────────────────────────────
+// Standard administrative onboarding form: collects First Name, Last Name,
+// Phone Number, and Email Address, creates a fresh account already provisioned
+// with isAdmin=true. The newly registered admin signs into the dashboard
+// exclusively via WhatsApp OTP delivered to the registered phone number — no
+// password is set or required at any point in the flow.
+function AdminOnboardingModal({ open, onClose, onCreated }) {
+  const [form, setForm] = useState({ firstName: '', lastName: '', phone: '', email: '' })
+  const [saving, setSaving] = useState(false)
+  const [error, setError]   = useState(null)
+
+  useEffect(() => {
+    if (!open) {
+      setForm({ firstName: '', lastName: '', phone: '', email: '' })
+      setError(null)
+      setSaving(false)
+    }
+  }, [open])
+
+  if (!open) return null
+
+  const canSubmit = form.firstName.trim() && form.lastName.trim() && form.phone.trim() && form.email.trim()
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (!canSubmit) return
+    setSaving(true)
+    setError(null)
+    try {
+      const r = await api.post('/admin/users', {
+        firstName: form.firstName.trim(),
+        lastName:  form.lastName.trim(),
+        phone:     form.phone.trim(),
+        email:     form.email.trim(),
+      })
+      onCreated(r.data)
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to onboard admin.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function field(key) {
+    return (v) => setForm(f => ({ ...f, [key]: v }))
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => !saving && onClose()} />
+      <form
+        onSubmit={handleSubmit}
+        className="relative bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-lg p-6 z-10"
+      >
+        <div className="flex items-start justify-between mb-5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center">
+              <UserPlus className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-on-surface">Onboard New Admin</h3>
+              <p className="text-xs text-on-surface-variant mt-0.5">
+                Register a new administrator. They will sign in via WhatsApp OTP — no password is required.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => !saving && onClose()}
+            className="p-2 hover:bg-surface-container-high rounded-lg flex-shrink-0"
+          >
+            <X className="w-4 h-4 text-on-surface-variant" />
+          </button>
+        </div>
+
+        {error && (
+          <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg px-3 py-2 mb-4">
+            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-[11px] font-semibold tracking-[0.12em] uppercase text-on-surface-variant block mb-1.5">
+              First Name
+            </label>
+            <input
+              required
+              autoFocus
+              value={form.firstName}
+              onChange={e => field('firstName')(e.target.value)}
+              className="w-full px-3 py-2.5 text-sm bg-surface-container rounded-lg border border-transparent focus:border-purple-400/50 outline-none"
+              placeholder="Jane"
+            />
+          </div>
+          <div>
+            <label className="text-[11px] font-semibold tracking-[0.12em] uppercase text-on-surface-variant block mb-1.5">
+              Last Name
+            </label>
+            <input
+              required
+              value={form.lastName}
+              onChange={e => field('lastName')(e.target.value)}
+              className="w-full px-3 py-2.5 text-sm bg-surface-container rounded-lg border border-transparent focus:border-purple-400/50 outline-none"
+              placeholder="Doe"
+            />
+          </div>
+        </div>
+
+        <div className="mt-3">
+          <label className="text-[11px] font-semibold tracking-[0.12em] uppercase text-on-surface-variant block mb-1.5">
+            WhatsApp Phone Number
+          </label>
+          <div className="relative">
+            <PhoneIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant" />
+            <input
+              required
+              type="tel"
+              value={form.phone}
+              onChange={e => field('phone')(e.target.value)}
+              className="w-full pl-9 pr-3 py-2.5 text-sm bg-surface-container rounded-lg border border-transparent focus:border-purple-400/50 outline-none"
+              placeholder="+1 555 123 4567"
+            />
+          </div>
+          <p className="flex items-center gap-1.5 text-[11px] text-on-surface-variant mt-1.5">
+            <MessageCircle className="w-3 h-3 text-emerald-600" />
+            Sign-in OTPs are delivered to this number on WhatsApp.
+          </p>
+        </div>
+
+        <div className="mt-3">
+          <label className="text-[11px] font-semibold tracking-[0.12em] uppercase text-on-surface-variant block mb-1.5">
+            Email Address
+          </label>
+          <div className="relative">
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant" />
+            <input
+              required
+              type="email"
+              value={form.email}
+              onChange={e => field('email')(e.target.value)}
+              className="w-full pl-9 pr-3 py-2.5 text-sm bg-surface-container rounded-lg border border-transparent focus:border-purple-400/50 outline-none"
+              placeholder="jane.doe@bridger.app"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-start gap-2 bg-purple-50 border border-purple-200 text-purple-800 text-xs rounded-xl px-3 py-2 mt-4">
+          <ShieldCheck className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+          <span>
+            <strong>Role:</strong> Admin will be assigned automatically. Authentication is exclusive to the registered WhatsApp phone number.
+          </span>
+        </div>
+
+        <div className="flex gap-3 mt-5">
+          <button
+            type="button"
+            onClick={() => !saving && onClose()}
+            disabled={saving}
+            className="flex-1 py-2.5 text-sm font-semibold text-on-surface-variant border border-outline-variant rounded-xl hover:bg-surface-container-high transition-colors disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={!canSubmit || saving}
+            className="flex-1 py-2.5 text-sm font-semibold bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+            {saving ? 'Onboarding…' : 'Create Admin'}
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function UserManagement() {
+  const navigate = useNavigate()
   const [page,         setPage]        = useState(1)
   const [search,       setSearch]      = useState('')
   const [kycFilter,    setKycFilter]   = useState('')
@@ -441,10 +622,7 @@ export default function UserManagement() {
   const [total,        setTotal]       = useState(0)
   const [loading,      setLoading]     = useState(true)
   const [error,        setError]       = useState(null)
-  const [showAddUser,  setShowAddUser] = useState(false)
-  const [addForm,      setAddForm]     = useState({ name: '', phone: '', email: '' })
-  const [addSaving,    setAddSaving]   = useState(false)
-  const [addError,     setAddError]    = useState(null)
+  const [showOnboard,  setShowOnboard] = useState(false)
   const [banTarget,    setBanTarget]   = useState(null)
   const [banSaving,    setBanSaving]   = useState(false)
   const [statusCounts, setStatusCounts] = useState(null) // { Verified, Pending, Unverified, Rejected, Banned }
@@ -543,19 +721,32 @@ export default function UserManagement() {
     }
   }
 
+  // Revoke admin via PATCH /admin/users/:id/demote
+  async function executeDemote(userId) {
+    try {
+      await api.patch(`/admin/users/${userId}/demote`)
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, isAdmin: false } : u))
+      if (drawerUser?.id === userId) setDrawerUser(u => ({ ...u, isAdmin: false }))
+    } catch (err) {
+      console.error('Demote failed:', err)
+    }
+  }
+
   function handleAction(user, action) {
     if (action === 'ban-modal') {
       setBanTarget(user)
       return
     }
     const messages = {
-      warn:    { title: `Warn ${user.name || user.phone}`, message: 'Send an automated warning to this user about policy violations.', danger: false },
-      unban:   { title: `Unban ${user.name || user.phone}`, message: `Remove the ban from this user. They will regain full access.`, danger: false },
+      warn:   { title: `Warn ${user.name || user.phone}`, message: 'Send an automated warning to this user about policy violations.', danger: false },
+      unban:  { title: `Unban ${user.name || user.phone}`, message: `Remove the ban from this user. They will regain full access.`, danger: false },
+      demote: { title: `Revoke admin from ${user.name || user.phone}`, message: 'This user will lose all administrative access and return to standard user status. Continue?', danger: true },
     }
     setConfirm({
       ...messages[action],
       onConfirm: async () => {
-        if (action === 'unban') await executeBan(user.id, false)
+        if (action === 'unban')  await executeBan(user.id, false)
+        if (action === 'demote') await executeDemote(user.id)
         setConfirm(null)
       },
     })
@@ -588,22 +779,6 @@ export default function UserManagement() {
     URL.revokeObjectURL(url)
   }
 
-  async function handleAddUser(e) {
-    e.preventDefault()
-    setAddSaving(true)
-    setAddError(null)
-    try {
-      await api.post('/admin/users', addForm)
-      setShowAddUser(false)
-      setAddForm({ name: '', phone: '', email: '' })
-      fetchUsers()
-    } catch (err) {
-      setAddError(err.response?.data?.error || 'Failed to create user.')
-    } finally {
-      setAddSaving(false)
-    }
-  }
-
   return (
     <div className="p-6 max-w-[1400px] mx-auto space-y-5 pb-10">
       {/* Header */}
@@ -615,10 +790,11 @@ export default function UserManagement() {
         <div className="flex items-center gap-3">
           <ExportButton onClick={handleExport} />
           <button
-            onClick={() => { setAddError(null); setShowAddUser(true) }}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold monolith-gradient text-white rounded-xl hover:opacity-90 transition-opacity shadow-sm"
+            onClick={() => setShowOnboard(true)}
+            title="Register a brand-new administrator (signs in via WhatsApp OTP)"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors shadow-sm"
           >
-            <UserPlus className="w-4 h-4" /> Add User
+            <UserPlus className="w-4 h-4" /> Onboard New Admin
           </button>
         </div>
       </div>
@@ -631,24 +807,34 @@ export default function UserManagement() {
         </div>
       )}
 
-      {/* KPIs + Status distribution donut */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="grid grid-cols-1 gap-4">
-          <KpiCard label="Total Users"    value={total.toLocaleString()}   changeType="neutral" icon={<Users className="w-4 h-4 text-blue-600" />}   accentColor="#3B82F6" />
-          <KpiCard label="Active on Page" value={users.length.toString()}  sublabel={`page ${page}`} changeType="neutral" icon={<Users className="w-4 h-4 text-emerald-600" />} accentColor="#059669" />
-        </div>
-        <div className="lg:col-span-2">
-          <StatusDistribution
-            loading={statusLoading}
-            data={statusCounts ? [
-              { name: 'Verified',   value: statusCounts.Verified },
-              { name: 'Pending',    value: statusCounts.Pending },
-              { name: 'Unverified', value: statusCounts.Unverified },
-              { name: 'Rejected',   value: statusCounts.Rejected },
-              { name: 'Banned',     value: statusCounts.Banned },
-            ] : []}
-          />
-        </div>
+      {/* KPIs + Status distribution — three cells (Total Users, Pending KYC, Status donut)
+          share the same height and width in a 3-col grid. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch">
+        <KpiCard
+          label="Total Users"
+          value={total.toLocaleString()}
+          changeType="neutral"
+          icon={<Users className="w-4 h-4 text-blue-600" />}
+          accentColor="#3B82F6"
+        />
+        <KpiCard
+          label="Pending KYC"
+          value={(statusCounts?.Pending ?? 0).toLocaleString()}
+          sublabel="awaiting review"
+          changeType="neutral"
+          icon={<Clock className="w-4 h-4 text-amber-600" />}
+          accentColor="#D97706"
+        />
+        <StatusDistribution
+          loading={statusLoading}
+          data={statusCounts ? [
+            { name: 'Verified',   value: statusCounts.Verified },
+            { name: 'Pending',    value: statusCounts.Pending },
+            { name: 'Unverified', value: statusCounts.Unverified },
+            { name: 'Rejected',   value: statusCounts.Rejected },
+            { name: 'Banned',     value: statusCounts.Banned },
+          ] : []}
+        />
       </div>
 
       {/* Table card */}
@@ -740,11 +926,18 @@ export default function UserManagement() {
                       <td className="px-5 py-4 text-sm text-on-surface">${Number(u.walletBalance ?? 0).toFixed(2)}</td>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                          <button className="p-1.5 rounded-lg hover:bg-surface-container-high text-on-surface-variant transition-colors">
-                            <MessageSquare className="w-4 h-4" />
+                          <button
+                            onClick={() => navigate(`/users/${u.id}/activity`)}
+                            title="Activity History"
+                            aria-label="View activity history"
+                            className="p-1.5 rounded-lg hover:bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors"
+                          >
+                            <History className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => setDrawerUser(u)}
+                            title="View details"
+                            aria-label="View user details"
                             className="p-1.5 rounded-lg hover:bg-surface-container-high text-on-surface-variant transition-colors"
                           >
                             <Eye className="w-4 h-4" />
@@ -794,78 +987,16 @@ export default function UserManagement() {
         onConfirm={handleBanConfirm}
       />
 
-      {/* Add User Modal */}
-      {showAddUser && (
-        <>
-          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setShowAddUser(false)} />
-          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[420px] bg-surface-container-lowest rounded-2xl shadow-2xl">
-            <form onSubmit={handleAddUser} className="p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-on-surface">Add User</h2>
-                <button type="button" onClick={() => setShowAddUser(false)} className="p-1.5 hover:bg-surface-container-high rounded-lg">
-                  <X className="w-4 h-4 text-on-surface-variant" />
-                </button>
-              </div>
-
-              {addError && (
-                <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg px-3 py-2">
-                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span>{addError}</span>
-                </div>
-              )}
-
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs font-semibold text-on-surface-variant">Name</label>
-                  <input
-                    value={addForm.name}
-                    onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))}
-                    className="w-full mt-1 px-3 py-2 text-sm bg-surface-container rounded-lg border border-transparent focus:border-primary/30 outline-none"
-                    placeholder="Jane Doe"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-on-surface-variant">Phone *</label>
-                  <input
-                    required
-                    value={addForm.phone}
-                    onChange={e => setAddForm(f => ({ ...f, phone: e.target.value }))}
-                    className="w-full mt-1 px-3 py-2 text-sm bg-surface-container rounded-lg border border-transparent focus:border-primary/30 outline-none"
-                    placeholder="+1234567890"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-on-surface-variant">Email</label>
-                  <input
-                    type="email"
-                    value={addForm.email}
-                    onChange={e => setAddForm(f => ({ ...f, email: e.target.value }))}
-                    className="w-full mt-1 px-3 py-2 text-sm bg-surface-container rounded-lg border border-transparent focus:border-primary/30 outline-none"
-                    placeholder="user@example.com"
-                  />
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowAddUser(false)}
-                  className="flex-1 py-2 text-sm font-semibold border border-outline-variant rounded-lg hover:bg-surface-container-high transition-colors text-on-surface-variant"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={addSaving || !addForm.phone}
-                  className="flex-1 py-2 text-sm font-semibold monolith-gradient text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
-                >
-                  {addSaving ? 'Saving…' : 'Create User'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </>
-      )}
+      {/* Admin Onboarding form — registers a brand-new admin account */}
+      <AdminOnboardingModal
+        open={showOnboard}
+        onClose={() => setShowOnboard(false)}
+        onCreated={() => {
+          setShowOnboard(false)
+          fetchUsers()
+          fetchStatusCounts()
+        }}
+      />
     </div>
   )
 }

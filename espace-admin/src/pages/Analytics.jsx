@@ -12,10 +12,10 @@
  */
 import { useState, useEffect } from 'react'
 import {
-  LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
+  PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart,
 } from 'recharts'
-import { DollarSign, Users, CheckCircle2, RefreshCw, Loader2, AlertCircle, Wallet, ArrowRightLeft, Info, BookOpen, ChevronDown } from 'lucide-react'
+import { DollarSign, Users, CheckCircle2, RefreshCw, Loader2, AlertCircle, Wallet, ArrowRightLeft, Info } from 'lucide-react'
 import KpiCard from '../components/shared/KpiCard'
 import ChartCard from '../components/shared/ChartCard'
 import api from '../services/api'
@@ -27,70 +27,6 @@ import api from '../services/api'
 //  • Item value   100%  → seller / traveler (pass-through)
 const FEE_RATE          = 0.04
 const PASS_THROUGH_MULT = 1 + 0.12 + 0.015   // 1.135
-
-// Metric Definitions — used by the Glossary panel at the bottom of the page.
-const METRIC_DEFS = [
-  {
-    name: 'Total Net Benefit',
-    aggregates: 'The 4% service fee earned across all GMV in the selected period.',
-    calc: 'Σ(monthly GMV) × 0.04 over the active period (12m / 6m / 30d).',
-    insight: 'Bridger\'s exclusive margin — the only revenue the platform retains. Use it as the headline P&L number for the period.',
-  },
-  {
-    name: 'Total Pass-Through Value',
-    aggregates: 'Item value + 12% logistics + 1.5% insurance routed through escrow to third parties.',
-    calc: 'Σ(monthly GMV) × (1 + 0.12 + 0.015) = GMV × 1.135.',
-    insight: 'Marketplace throughput Bridger facilitates but does not retain. Tracks gross volume under custody and exposure, distinct from earnings.',
-  },
-  {
-    name: 'Total Users',
-    aggregates: 'Cumulative user accounts in the database.',
-    calc: 'COUNT(*) FROM users (server-side, returned via /admin/analytics).',
-    insight: 'Top-of-funnel scale. Pair with User Growth and Match Rate to read activation health.',
-  },
-  {
-    name: 'Total Deals',
-    aggregates: 'Cumulative deal records, all statuses.',
-    calc: 'COUNT(*) FROM deals.',
-    insight: 'Lifetime marketplace activity. Indicates depth of supply and demand on the platform.',
-  },
-  {
-    name: 'Match Rate',
-    aggregates: 'Share of deals that progressed past OPEN into MATCHED or beyond.',
-    calc: '(deals with status ∈ MATCHED…COMPLETED) ÷ totalDeals × 100.',
-    insight: 'Marketplace liquidity. A low match rate flags supply-demand imbalance on routes or pricing friction.',
-  },
-  {
-    name: 'GMV Trends',
-    aggregates: 'Sum of deal prices grouped by month for the last 12 months (sliced by selected period).',
-    calc: 'Σ(deal.price) GROUP BY month(deal.createdAt). Period selector slices the trailing 30d / 6m / 12m.',
-    insight: 'Top-line marketplace volume over time — drives both Net Benefit (×4%) and Pass-Through (×113.5%). Watch the slope for growth or contraction.',
-  },
-  {
-    name: 'Top Performing Routes',
-    aggregates: 'Top city pairs by shipment count.',
-    calc: 'COUNT(*) GROUP BY (fromCity, toCity) ORDER BY count DESC LIMIT 5.',
-    insight: 'Where the network is densest. Concentrated demand routes are levers for incentives, capacity ops, and pricing experiments.',
-  },
-  {
-    name: 'Deal Categories',
-    aggregates: 'Distribution of deals across packageSize buckets.',
-    calc: 'Per category: count / totalDeals × 100, expressed as a percentage of the donut.',
-    insight: 'Product mix. Shifts here predict logistics cost (large items) and insurance exposure (high-value categories).',
-  },
-  {
-    name: 'User Growth',
-    aggregates: 'New user registrations per month for the last 12 months.',
-    calc: 'COUNT(*) FROM users GROUP BY month(createdAt).',
-    insight: 'Acquisition velocity. Compare against GMV trends to see whether new users translate into transactions.',
-  },
-  {
-    name: 'Deals by Destination Country',
-    aggregates: 'Top 6 destination countries, switchable between value (GMV) and volume (deal count).',
-    calc: 'Value mode: Σ(deal.price) GROUP BY country. Volume mode: COUNT(*) GROUP BY country. Both ORDER BY metric DESC LIMIT 6.',
-    insight: 'Geographic concentration of demand. Drives expansion priorities, FX hedging needs, and country-level compliance focus.',
-  },
-]
 
 function PrimarySummaryCard({ label, value, sublabel, icon, accent, definition }) {
   return (
@@ -120,48 +56,6 @@ function PrimarySummaryCard({ label, value, sublabel, icon, accent, definition }
   )
 }
 
-function MetricGlossary() {
-  const [open, setOpen] = useState(false)
-  return (
-    <div className="bg-surface-container-lowest rounded-xl shadow-card border border-surface-container">
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="w-full px-5 py-4 flex items-center justify-between hover:bg-surface-container-low/30 transition-colors"
-      >
-        <span className="flex items-center gap-2">
-          <BookOpen className="w-4 h-4 text-primary-container" />
-          <span className="text-sm font-semibold text-on-surface">Metric Definitions</span>
-          <span className="text-xs text-on-surface-variant">— what each card and chart on this page means</span>
-        </span>
-        <ChevronDown className={`w-4 h-4 text-on-surface-variant transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-      {open && (
-        <div className="border-t border-surface-container px-5 py-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-          {METRIC_DEFS.map(m => (
-            <div key={m.name} className="bg-surface-container-low/30 rounded-lg p-3.5">
-              <p className="text-sm font-semibold text-on-surface">{m.name}</p>
-              <dl className="mt-2 space-y-1.5 text-[11.5px] leading-relaxed">
-                <div>
-                  <dt className="text-[10px] font-bold tracking-wider uppercase text-on-surface-variant/70">Aggregates</dt>
-                  <dd className="text-on-surface-variant">{m.aggregates}</dd>
-                </div>
-                <div>
-                  <dt className="text-[10px] font-bold tracking-wider uppercase text-on-surface-variant/70">Calculation</dt>
-                  <dd className="text-on-surface-variant font-mono">{m.calc}</dd>
-                </div>
-                <div>
-                  <dt className="text-[10px] font-bold tracking-wider uppercase text-on-surface-variant/70">Insight</dt>
-                  <dd className="text-on-surface-variant">{m.insight}</dd>
-                </div>
-              </dl>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
 const ChartTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
   return (
@@ -179,7 +73,11 @@ const ChartTooltip = ({ active, payload, label }) => {
 
 export default function Analytics() {
   const [period,       setPeriod]       = useState('12m')
-  const [countryView,  setCountryView]  = useState('revenue')
+  // 'top' = top 6 destinations by deal volume, 'bottom' = bottom 6
+  const [countryView,  setCountryView]  = useState('top')
+  // GMV Trends data view — 'passthrough' shows Total Pass-Through Value,
+  // 'netbenefit' shows the 4% service-fee margin.
+  const [gmvView,      setGmvView]      = useState('passthrough')
   const [data,         setData]         = useState(null)
   const [loading,      setLoading]      = useState(true)
   const [error,        setError]        = useState(null)
@@ -230,12 +128,42 @@ export default function Analytics() {
   const totalPassThrough = Math.round(periodGmv * PASS_THROUGH_MULT)
   const periodLabel = period === '30d' ? 'last 2 months' : period === '6m' ? 'last 6 months' : 'last 12 months'
 
+  // Derive monthly series for the GMV Trends chart depending on the active view.
+  const gmvSeries = revenueChartData.map(r => ({
+    month: r.month,
+    value: gmvView === 'netbenefit'
+      ? Math.round((r.revenue ?? 0) * FEE_RATE)
+      : Math.round((r.revenue ?? 0) * PASS_THROUGH_MULT),
+  }))
+  const gmvMeta = gmvView === 'netbenefit'
+    ? { label: 'Total Net Benefit',        color: '#059669', gradId: 'netGrad', subtitle: '4% service-fee margin retained per month' }
+    : { label: 'Total Pass-Through Value', color: '#3B82F6', gradId: 'ptGrad',  subtitle: 'Funds routed through escrow per month (×1.135)' }
+
+  // MoM growth pulled from the backend analytics endpoint.
+  const usersMoM = kpis?.usersMoM ?? 0
+  const dealsMoM = kpis?.dealsMoM ?? 0
+  const fmtMoM = (v) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}% vs last month`
+  const momType = (v) => (v > 0 ? 'up' : v < 0 ? 'down' : 'neutral')
+
   return (
     <div className="p-6 max-w-[1400px] mx-auto space-y-5 pb-10">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-semibold text-on-surface">Analytics</h1>
-        <p className="text-sm text-on-surface-variant mt-0.5">Net benefit, pass-through volume, and platform health for the {periodLabel}</p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-semibold text-on-surface">Analytics</h1>
+          <p className="text-sm text-on-surface-variant mt-0.5">Net benefit, pass-through volume, and platform health for the {periodLabel}</p>
+        </div>
+        <div className="flex border border-surface-container-high rounded-lg overflow-hidden">
+          {[['12m','12 Months'],['6m','6 Months'],['30d','Last 2mo']].map(([k, l]) => (
+            <button
+              key={k}
+              onClick={() => setPeriod(k)}
+              className={`px-3 py-1.5 text-xs font-semibold transition-colors ${period === k ? 'bg-[#1A2E82] text-white' : 'text-on-surface-variant hover:bg-surface-container-high'}`}
+            >
+              {l}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Primary summary cards */}
@@ -260,48 +188,96 @@ export default function Analytics() {
 
       {/* Secondary KPIs — driven by /admin/analytics kpis */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <KpiCard label="Total Users"    value={kpis.totalUsers?.toLocaleString() ?? '—'}    sublabel="All accounts on file"     changeType="neutral" icon={<Users        className="w-4 h-4 text-blue-600" />}    accentColor="#3B82F6" />
-        <KpiCard label="Total Deals"    value={kpis.totalDeals?.toLocaleString() ?? '—'}    sublabel="All statuses, lifetime"   changeType="neutral" icon={<DollarSign   className="w-4 h-4 text-emerald-600" />} accentColor="#059669" />
-        <KpiCard label="Match Rate"     value={`${kpis.matchRate ?? 0}%`}                    sublabel="Deals progressed past OPEN" changeType="neutral" icon={<CheckCircle2 className="w-4 h-4 text-teal-600" />}    accentColor="#0D9488" />
+        <KpiCard
+          label="Total Users"
+          value={kpis.totalUsers?.toLocaleString() ?? '—'}
+          sublabel="All accounts on file"
+          change={fmtMoM(usersMoM)}
+          changeType={momType(usersMoM)}
+          icon={<Users className="w-4 h-4 text-blue-600" />}
+          accentColor="#3B82F6"
+        />
+        <KpiCard
+          label="Total Deals"
+          value={kpis.totalDeals?.toLocaleString() ?? '—'}
+          sublabel="All statuses, lifetime"
+          change={fmtMoM(dealsMoM)}
+          changeType={momType(dealsMoM)}
+          icon={<DollarSign className="w-4 h-4 text-emerald-600" />}
+          accentColor="#059669"
+        />
+        <KpiCard
+          label="Match Rate"
+          value={`${kpis.matchRate ?? 0}%`}
+          sublabel="Deals progressed past OPEN"
+          changeType="neutral"
+          icon={<CheckCircle2 className="w-4 h-4 text-teal-600" />}
+          accentColor="#0D9488"
+        />
       </div>
 
-      {/* Revenue (GMV) Trends — full width */}
-      <ChartCard
-        title="GMV Trends"
-        subtitle="Total deal value posted per month (GMV proxy)"
-        actions={
-          <div className="flex border border-surface-container-high rounded-lg overflow-hidden">
-            {[['12m','12 Months'],['6m','6 Months'],['30d','Last 2mo']].map(([k, l]) => (
-              <button
-                key={k}
-                onClick={() => setPeriod(k)}
-                className={`px-3 py-1.5 text-xs font-semibold transition-colors ${period === k ? 'bg-[#1A2E82] text-white' : 'text-on-surface-variant hover:bg-surface-container-high'}`}
-              >
-                {l}
-              </button>
-            ))}
-          </div>
-        }
-      >
-        <ResponsiveContainer width="100%" height={240}>
-          <AreaChart data={revenueChartData}>
-            <defs>
-              <linearGradient id="revGrad" x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stopColor="#1A2E82" stopOpacity={0.15} />
-                <stop offset="100%" stopColor="#1A2E82" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis dataKey="month" tick={{ fontSize: 10 }} tickLine={false} />
-            <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
-            <Tooltip content={<ChartTooltip />} formatter={v => [`$${v.toLocaleString()}`, 'GMV']} />
-            <Area type="monotone" dataKey="revenue" name="Revenue" stroke="#1A2E82" strokeWidth={2} fill="url(#revGrad)" dot={false} />
-          </AreaChart>
-        </ResponsiveContainer>
-      </ChartCard>
+      {/* Compact monetary-growth trend pair — sized to match Top Routes / Categories below. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* GMV Trends — monetary growth view, toggleable between Pass-Through & Net Benefit */}
+        <ChartCard
+          title="GMV Trends"
+          subtitle={gmvMeta.subtitle}
+          actions={
+            <div className="flex border border-surface-container-high rounded-lg overflow-hidden">
+              {[['passthrough','Pass-Through'],['netbenefit','Net Benefit']].map(([k, l]) => (
+                <button
+                  key={k}
+                  onClick={() => setGmvView(k)}
+                  className={`px-2.5 py-1 text-[11px] font-semibold transition-colors ${gmvView === k ? 'bg-[#1A2E82] text-white' : 'text-on-surface-variant hover:bg-surface-container-high'}`}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+          }
+        >
+          <ResponsiveContainer width="100%" height={180}>
+            <AreaChart data={gmvSeries} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id={gmvMeta.gradId} x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%"   stopColor={gmvMeta.color} stopOpacity={0.18} />
+                  <stop offset="100%" stopColor={gmvMeta.color} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="month" tick={{ fontSize: 10 }} tickLine={false} />
+              <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+              <Tooltip
+                content={<ChartTooltip />}
+                formatter={v => [`$${v.toLocaleString()}`, gmvMeta.label]}
+              />
+              <Area type="monotone" dataKey="value" name={gmvMeta.label} stroke={gmvMeta.color} strokeWidth={2} fill={`url(#${gmvMeta.gradId})`} dot={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </ChartCard>
 
-      {/* Top Routes + Categories */}
-      <div className="grid grid-cols-2 gap-4">
+        {/* User Growth — sized to match GMV Trends and the Top Routes row below */}
+        <ChartCard title="User Growth" subtitle="New registrations per month — last 12 months">
+          <ResponsiveContainer width="100%" height={180}>
+            <AreaChart data={userGrowth} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="regGrad" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stopColor="#1A2E82" stopOpacity={0.12} />
+                  <stop offset="100%" stopColor="#1A2E82" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="month" tick={{ fontSize: 10 }} tickLine={false} />
+              <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+              <Tooltip content={<ChartTooltip />} />
+              <Area type="monotone" dataKey="registrations" name="New Registrations" stroke="#1A2E82" strokeWidth={2} fill="url(#regGrad)" dot={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </ChartCard>
+      </div>
+
+      {/* Top Routes + Categories — same grid scale as GMV Trends / User Growth above */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Top Routes — real data from deals groupBy */}
         <ChartCard title="Top Performing Routes" subtitle="By shipment volume">
           <div className="space-y-2.5 mt-2">
@@ -361,35 +337,13 @@ export default function Analytics() {
         </ChartCard>
       </div>
 
-      {/* User Growth — real monthly registrations */}
-      <ChartCard title="User Growth" subtitle="New registrations per month — last 12 months">
-        <div className="flex gap-5 mb-3">
-          <div className="flex items-center gap-1.5 text-xs text-on-surface-variant"><div className="w-4 h-0.5 bg-[#1A2E82] rounded" /> New Registrations</div>
-        </div>
-        <ResponsiveContainer width="100%" height={220}>
-          <AreaChart data={userGrowth}>
-            <defs>
-              <linearGradient id="regGrad" x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stopColor="#1A2E82" stopOpacity={0.12} />
-                <stop offset="100%" stopColor="#1A2E82" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis dataKey="month" tick={{ fontSize: 10 }} tickLine={false} />
-            <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-            <Tooltip content={<ChartTooltip />} />
-            <Area type="monotone" dataKey="registrations" name="New Registrations" stroke="#1A2E82" strokeWidth={2} fill="url(#regGrad)" dot={false} />
-          </AreaChart>
-        </ResponsiveContainer>
-      </ChartCard>
-
-      {/* Deals by Country */}
+      {/* Deals by Destination Country — same horizontal-bar pattern as Top Performing Routes */}
       <ChartCard
         title="Deals by Destination Country"
-        subtitle="Top 6 destination markets"
+        subtitle={countryView === 'top' ? 'Top 6 destinations by shipment volume' : 'Bottom 6 destinations by shipment volume'}
         actions={
           <div className="flex border border-surface-container-high rounded-lg overflow-hidden">
-            {[['revenue','Value'],['deals','Volume']].map(([k, l]) => (
+            {[['top','Top 6'],['bottom','Bottom 6']].map(([k, l]) => (
               <button
                 key={k}
                 onClick={() => setCountryView(k)}
@@ -401,24 +355,33 @@ export default function Analytics() {
           </div>
         }
       >
-        {revenueByCountry.length > 0 ? (
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={revenueByCountry} barSize={36}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-              <XAxis dataKey="country" tick={{ fontSize: 10 }} tickLine={false} />
-              <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false}
-                tickFormatter={v => countryView === 'revenue' ? `$${(v/1000).toFixed(0)}k` : v}
-              />
-              <Tooltip content={<ChartTooltip />} formatter={v => countryView === 'revenue' ? [`$${v.toLocaleString()}`, 'GMV'] : [v, 'Deals']} />
-              <Bar dataKey={countryView} name={countryView === 'revenue' ? 'GMV' : 'Deals'} fill="#1A2E82" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        ) : (
-          <p className="text-sm text-on-surface-variant text-center py-8">No country data yet</p>
-        )}
+        {(() => {
+          if (revenueByCountry.length === 0) {
+            return <p className="text-sm text-on-surface-variant text-center py-8">No country data yet</p>
+          }
+          const ranked = countryView === 'top'
+            ? revenueByCountry.slice(0, 6)
+            : [...revenueByCountry].sort((a, b) => a.deals - b.deals).slice(0, 6)
+          const maxDeals = Math.max(...ranked.map(r => r.deals), 1)
+          return (
+            <div className="space-y-2.5 mt-2">
+              {ranked.map(r => (
+                <div key={r.country} className="flex items-center gap-3 cursor-pointer group">
+                  <div className="w-24 text-[11px] font-semibold text-on-surface-variant text-right flex-shrink-0 group-hover:text-primary transition-colors truncate">{r.country}</div>
+                  <div className="flex-1 h-6 bg-surface-container rounded overflow-hidden">
+                    <div
+                      className="h-full bg-[#1A2E82] group-hover:bg-[#3B82F6] rounded flex items-center justify-end pr-2 transition-all duration-300"
+                      style={{ width: `${(r.deals / maxDeals) * 100}%`, minWidth: '24px' }}
+                    >
+                      <span className="text-[10px] text-white font-medium">{r.deals}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        })()}
       </ChartCard>
-
-      <MetricGlossary />
     </div>
   )
 }

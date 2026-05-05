@@ -6,6 +6,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '../config/db';
 import { authenticate } from '../middleware/auth';
 import { requireAdmin } from '../middleware/requireAdmin';
+import { normalizePhone } from '../utils/phone';
 import logger from '../utils/logger';
 
 const router = Router();
@@ -419,10 +420,13 @@ router.get('/analytics', async (req: Request, res: Response, next: NextFunction)
     const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
     // KPIs
-    const [totalUsers, totalDeals, dealStatusGroups] = await Promise.all([
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const [totalUsers, totalDeals, dealStatusGroups, newUsersThisMonth, newDealsThisMonth] = await Promise.all([
       prisma.user.count(),
       prisma.deal.count(),
       prisma.deal.groupBy({ by: ['status'], _count: { _all: true } }),
+      prisma.user.count({ where: { createdAt: { gte: startOfMonth } } }),
+      prisma.deal.count({ where: { createdAt: { gte: startOfMonth } } }),
     ]);
 
     const dealsByStatus: Record<string, number> = {};
@@ -430,6 +434,12 @@ router.get('/analytics', async (req: Request, res: Response, next: NextFunction)
     const successfulMatches = ['MATCHED','PICKED_UP','IN_TRANSIT','DELIVERED','COMPLETED']
       .reduce((acc, s) => acc + (dealsByStatus[s] ?? 0), 0);
     const matchRate = totalDeals > 0 ? Math.round((successfulMatches / totalDeals) * 100) : 0;
+
+    // Month-over-month growth: this-month additions as % of end-of-last-month total
+    const usersBaseline = totalUsers - newUsersThisMonth;
+    const dealsBaseline = totalDeals - newDealsThisMonth;
+    const usersMoM = usersBaseline > 0 ? (newUsersThisMonth / usersBaseline) * 100 : (newUsersThisMonth > 0 ? 100 : 0);
+    const dealsMoM = dealsBaseline > 0 ? (newDealsThisMonth / dealsBaseline) * 100 : (newDealsThisMonth > 0 ? 100 : 0);
 
     // Fetch all deals from past 12 months for in-memory aggregation
     const ago12m = new Date(now.getFullYear(), now.getMonth() - 11, 1);
@@ -494,12 +504,20 @@ router.get('/analytics', async (req: Request, res: Response, next: NextFunction)
       countryMap[d.toCountry].deals += 1;
       if (d.status !== 'CANCELLED') countryMap[d.toCountry].revenue += d.price;
     }
+    // Return all destinations ranked by deal volume; frontend slices top/bottom.
     const revenueByCountry = Object.entries(countryMap)
       .map(([country, v]) => ({ country, revenue: Math.round(v.revenue), deals: v.deals }))
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 6);
+      .sort((a, b) => b.deals - a.deals);
 
-    res.json({ kpis: { totalUsers, totalDeals, matchRate }, revenueMonthly, topRoutes, dealsByCategory, userGrowth, revenueByCountry });
+    res.json({
+      kpis: {
+        totalUsers, totalDeals, matchRate,
+        usersMoM: Math.round(usersMoM * 10) / 10,
+        dealsMoM: Math.round(dealsMoM * 10) / 10,
+        newUsersThisMonth, newDealsThisMonth,
+      },
+      revenueMonthly, topRoutes, dealsByCategory, userGrowth, revenueByCountry,
+    });
   } catch (err) { next(err); }
 });
 
@@ -676,6 +694,71 @@ router.get('/users', async (req: Request, res: Response, next: NextFunction) => 
 });
 
 /**
+ * POST /admin/users
+ * Administrative onboarding — creates a brand-new user account already
+ * provisioned with isAdmin=true. Login is handled via the existing WhatsApp
+ * OTP flow at /auth/admin/otp/* against the registered phone number, so no
+ * password is collected here.
+ *
+ * Body: { firstName, lastName, phone, email }
+ */
+router.post('/users', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { firstName, lastName, phone: rawPhone, email } = req.body || {};
+
+    if (!firstName || typeof firstName !== 'string' || !firstName.trim()) {
+      return res.status(400).json({ error: 'First name is required' });
+    }
+    if (!lastName || typeof lastName !== 'string' || !lastName.trim()) {
+      return res.status(400).json({ error: 'Last name is required' });
+    }
+    if (!rawPhone) {
+      return res.status(400).json({ error: 'WhatsApp-linked phone number is required' });
+    }
+    if (!email || typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'A valid email address is required' });
+    }
+
+    let phone: string;
+    try { phone = normalizePhone(String(rawPhone)); }
+    catch { return res.status(400).json({ error: 'Invalid phone number format' }); }
+
+    const existing = await prisma.user.findUnique({ where: { phone } });
+    if (existing) {
+      return res.status(409).json({ error: 'A user with this phone number already exists' });
+    }
+
+    const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+    const user = await prisma.user.create({
+      data: {
+        phone,
+        name: fullName,
+        email: email.trim().toLowerCase(),
+        isAdmin: true,
+      } as any,
+      select: {
+        id: true, phone: true, name: true, email: true, isAdmin: true,
+        kycStatus: true, banned: true, createdAt: true,
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: (req as any).user?.id,
+        entityId: user.id,
+        entityType: 'USER',
+        action: 'ADMIN_ONBOARD',
+        ipAddress: req.ip,
+        metadata: JSON.stringify({ firstName, lastName, email }),
+      },
+    }).catch(() => {});
+
+    logger.info(`[Admin] Onboarded new admin ${user.id} (${phone.slice(-4)}) by ${(req as any).user?.id}`);
+    res.status(201).json(user);
+  } catch (err) { next(err); }
+});
+
+/**
  * PATCH /admin/users/:id/ban   — { reason?: string }
  * PATCH /admin/users/:id/unban
  */
@@ -772,6 +855,321 @@ router.patch('/users/:id/unflag', async (req: Request, res: Response, next: Next
     }).catch(() => {});
 
     res.json(user);
+  } catch (err) { next(err); }
+});
+
+/**
+ * PATCH /admin/users/:id/promote   — grant administrative privileges
+ * PATCH /admin/users/:id/demote    — revoke administrative privileges
+ *
+ * Distinct from /ban and /flag — these endpoints only toggle the isAdmin
+ * boolean and write a USER PROMOTE/DEMOTE entry to the audit log, so the
+ * admin UI can clearly separate role elevation from user creation flows.
+ */
+router.patch('/users/:id/promote', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const target = await prisma.user.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, isAdmin: true, banned: true },
+    });
+    if (!target)         return res.status(404).json({ error: 'User not found' });
+    if (target.isAdmin)  return res.status(409).json({ error: 'User is already an administrator' });
+    if (target.banned)   return res.status(409).json({ error: 'Cannot promote a banned user' });
+
+    const user = await prisma.user.update({
+      where: { id: req.params.id },
+      data:  { isAdmin: true } as any,
+      select: { id: true, name: true, phone: true, email: true, isAdmin: true },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: (req as any).user?.id,
+        entityId: user.id,
+        entityType: 'USER',
+        action: 'PROMOTE',
+        ipAddress: req.ip,
+      },
+    }).catch(() => {});
+
+    logger.info(`[Admin] User ${user.id} promoted to admin by ${(req as any).user?.id}`);
+    res.json(user);
+  } catch (err) { next(err); }
+});
+
+router.patch('/users/:id/demote', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const actorId = (req as any).user?.id;
+    if (actorId && actorId === req.params.id) {
+      return res.status(409).json({ error: 'You cannot demote yourself' });
+    }
+    const target = await prisma.user.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, isAdmin: true },
+    });
+    if (!target)          return res.status(404).json({ error: 'User not found' });
+    if (!target.isAdmin)  return res.status(409).json({ error: 'User is not an administrator' });
+
+    const user = await prisma.user.update({
+      where: { id: req.params.id },
+      data:  { isAdmin: false } as any,
+      select: { id: true, name: true, phone: true, email: true, isAdmin: true },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: actorId,
+        entityId: user.id,
+        entityType: 'USER',
+        action: 'DEMOTE',
+        ipAddress: req.ip,
+      },
+    }).catch(() => {});
+
+    logger.info(`[Admin] User ${user.id} demoted from admin by ${actorId}`);
+    res.json(user);
+  } catch (err) { next(err); }
+});
+
+/**
+ * GET /admin/users/:id/activity
+ * Aggregates a unified activity timeline for a single user, including:
+ *  - Deals sent / traveled (with status transitions)
+ *  - Trip postings
+ *  - Reviews authored / received
+ *  - Wallet transactions
+ *  - Disputes filed / against
+ *  - System audit logs (login, ban, flag, KYC actions, etc.)
+ *
+ * Query params: ?limit=200 (max 500), ?type=DEAL|TRIP|REVIEW|TRANSACTION|DISPUTE|SYSTEM
+ */
+router.get('/users/:id/activity', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.params.id;
+    const limit  = Math.min(500, Math.max(1, Number(req.query.limit) || 200));
+    const typeFilter = req.query.type ? String(req.query.type).toUpperCase() : null;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true, name: true, phone: true, email: true, avatar: true,
+        kycStatus: true, banned: true, flagged: true, isAdmin: true,
+        createdAt: true, lastLoginAt: true, totalDeals: true, rating: true,
+        completionRate: true, walletBalance: true, faceVerificationStatus: true,
+      },
+    });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const want = (t: string) => !typeFilter || typeFilter === t;
+
+    const [sentDeals, traveledDeals, trips, reviewsGiven, reviewsReceived,
+           transactions, disputesFiled, disputesAgainst, auditLogs] = await Promise.all([
+      want('DEAL') ? prisma.deal.findMany({
+        where: { senderId: userId },
+        orderBy: { updatedAt: 'desc' },
+        take: limit,
+        select: {
+          id: true, title: true, status: true, fromCity: true, toCity: true,
+          price: true, currency: true, createdAt: true, updatedAt: true,
+          cancelledAt: true, cancelReason: true,
+        },
+      }) : Promise.resolve([]),
+      want('DEAL') ? prisma.deal.findMany({
+        where: { travelerId: userId },
+        orderBy: { updatedAt: 'desc' },
+        take: limit,
+        select: {
+          id: true, title: true, status: true, fromCity: true, toCity: true,
+          price: true, currency: true, createdAt: true, updatedAt: true,
+          cancelledAt: true, cancelReason: true,
+        },
+      }) : Promise.resolve([]),
+      want('TRIP') ? prisma.trip.findMany({
+        where: { travelerId: userId },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        select: {
+          id: true, fromCity: true, toCity: true, status: true,
+          departureDate: true, transportType: true, price: true, currency: true,
+          createdAt: true, updatedAt: true,
+        },
+      }) : Promise.resolve([]),
+      want('REVIEW') ? prisma.review.findMany({
+        where: { authorId: userId },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        select: {
+          id: true, rating: true, comment: true, dealId: true,
+          targetId: true, target: { select: { name: true, phone: true } },
+          createdAt: true, sentiment: true, flagged: true,
+        },
+      }) : Promise.resolve([]),
+      want('REVIEW') ? prisma.review.findMany({
+        where: { targetId: userId },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        select: {
+          id: true, rating: true, comment: true, dealId: true,
+          authorId: true, author: { select: { name: true, phone: true } },
+          createdAt: true, sentiment: true, flagged: true,
+        },
+      }) : Promise.resolve([]),
+      want('TRANSACTION') ? prisma.transaction.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        select: {
+          id: true, type: true, amount: true, currency: true, status: true,
+          dealId: true, createdAt: true,
+        },
+      }) : Promise.resolve([]),
+      want('DISPUTE') ? prisma.dispute.findMany({
+        where: { filerId: userId },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        select: { id: true, status: true, reason: true, dealId: true, createdAt: true, updatedAt: true },
+      }).catch(() => []) : Promise.resolve([]),
+      want('DISPUTE') ? prisma.dispute.findMany({
+        where: { againstId: userId },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        select: { id: true, status: true, reason: true, dealId: true, createdAt: true, updatedAt: true },
+      }).catch(() => []) : Promise.resolve([]),
+      want('SYSTEM') ? prisma.auditLog.findMany({
+        where: { OR: [{ userId }, { entityId: userId, entityType: 'USER' }] },
+        orderBy: { recordedAt: 'desc' },
+        take: limit,
+      }) : Promise.resolve([]),
+    ]);
+
+    type Event = {
+      id: string;
+      category: 'DEAL' | 'TRIP' | 'REVIEW' | 'TRANSACTION' | 'DISPUTE' | 'SYSTEM';
+      action: string;
+      timestamp: string;
+      title: string;
+      description?: string;
+      meta?: Record<string, any>;
+    };
+
+    const events: Event[] = [];
+
+    for (const d of sentDeals) {
+      events.push({
+        id: `deal-sent-${d.id}`,
+        category: 'DEAL',
+        action: `DEAL_${d.status}`,
+        timestamp: (d.updatedAt || d.createdAt).toISOString(),
+        title: `Sent package: ${d.title}`,
+        description: `${d.fromCity} → ${d.toCity} • ${d.currency} ${d.price.toFixed(2)}`,
+        meta: { dealId: d.id, status: d.status, role: 'SENDER', cancelReason: d.cancelReason },
+      });
+    }
+    for (const d of traveledDeals) {
+      events.push({
+        id: `deal-traveled-${d.id}`,
+        category: 'DEAL',
+        action: `DEAL_${d.status}`,
+        timestamp: (d.updatedAt || d.createdAt).toISOString(),
+        title: `Carried package: ${d.title}`,
+        description: `${d.fromCity} → ${d.toCity} • ${d.currency} ${d.price.toFixed(2)}`,
+        meta: { dealId: d.id, status: d.status, role: 'TRAVELER', cancelReason: d.cancelReason },
+      });
+    }
+    for (const t of trips) {
+      events.push({
+        id: `trip-${t.id}`,
+        category: 'TRIP',
+        action: `TRIP_${t.status}`,
+        timestamp: (t.updatedAt || t.createdAt).toISOString(),
+        title: `Posted trip: ${t.fromCity} → ${t.toCity}`,
+        description: `${t.transportType} • ${t.currency} ${t.price.toFixed(2)}${t.departureDate ? ` • departs ${t.departureDate.toISOString().slice(0, 10)}` : ''}`,
+        meta: { tripId: t.id, status: t.status, transportType: t.transportType },
+      });
+    }
+    for (const r of reviewsGiven) {
+      events.push({
+        id: `review-given-${r.id}`,
+        category: 'REVIEW',
+        action: 'REVIEW_AUTHORED',
+        timestamp: r.createdAt.toISOString(),
+        title: `Left a ${r.rating}★ review${r.target?.name ? ` for ${r.target.name}` : ''}`,
+        description: r.comment || undefined,
+        meta: { reviewId: r.id, dealId: r.dealId, rating: r.rating, sentiment: r.sentiment, flagged: r.flagged, role: 'AUTHOR' },
+      });
+    }
+    for (const r of reviewsReceived) {
+      events.push({
+        id: `review-received-${r.id}`,
+        category: 'REVIEW',
+        action: 'REVIEW_RECEIVED',
+        timestamp: r.createdAt.toISOString(),
+        title: `Received a ${r.rating}★ review${r.author?.name ? ` from ${r.author.name}` : ''}`,
+        description: r.comment || undefined,
+        meta: { reviewId: r.id, dealId: r.dealId, rating: r.rating, sentiment: r.sentiment, flagged: r.flagged, role: 'TARGET' },
+      });
+    }
+    for (const tx of transactions) {
+      events.push({
+        id: `tx-${tx.id}`,
+        category: 'TRANSACTION',
+        action: `TX_${tx.type}`,
+        timestamp: tx.createdAt.toISOString(),
+        title: `${tx.type.replace(/_/g, ' ')} • ${tx.currency} ${tx.amount.toFixed(2)}`,
+        description: `Status: ${tx.status}${tx.dealId ? ` • deal ${tx.dealId}` : ''}`,
+        meta: { txId: tx.id, type: tx.type, status: tx.status, dealId: tx.dealId, amount: tx.amount, currency: tx.currency },
+      });
+    }
+    for (const d of disputesFiled) {
+      events.push({
+        id: `dispute-filed-${d.id}`,
+        category: 'DISPUTE',
+        action: `DISPUTE_${d.status}`,
+        timestamp: (d.updatedAt || d.createdAt).toISOString(),
+        title: `Filed dispute on deal ${d.dealId}`,
+        description: d.reason || undefined,
+        meta: { disputeId: d.id, dealId: d.dealId, status: d.status, role: 'FILER' },
+      });
+    }
+    for (const d of disputesAgainst) {
+      events.push({
+        id: `dispute-against-${d.id}`,
+        category: 'DISPUTE',
+        action: `DISPUTE_${d.status}`,
+        timestamp: (d.updatedAt || d.createdAt).toISOString(),
+        title: `Dispute filed against this user on deal ${d.dealId}`,
+        description: d.reason || undefined,
+        meta: { disputeId: d.id, dealId: d.dealId, status: d.status, role: 'AGAINST' },
+      });
+    }
+    for (const a of auditLogs) {
+      let metadata: any = null;
+      try { metadata = a.metadata ? JSON.parse(a.metadata) : null; } catch { metadata = a.metadata; }
+      events.push({
+        id: `audit-${a.id}`,
+        category: 'SYSTEM',
+        action: a.action,
+        timestamp: a.recordedAt.toISOString(),
+        title: `${a.action} on ${a.entityType}`,
+        description: a.ipAddress ? `from ${a.ipAddress}` : undefined,
+        meta: { entityId: a.entityId, entityType: a.entityType, ipAddress: a.ipAddress, metadata },
+      });
+    }
+
+    events.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+    const trimmed = events.slice(0, limit);
+
+    const counts = {
+      total: events.length,
+      DEAL: events.filter(e => e.category === 'DEAL').length,
+      TRIP: events.filter(e => e.category === 'TRIP').length,
+      REVIEW: events.filter(e => e.category === 'REVIEW').length,
+      TRANSACTION: events.filter(e => e.category === 'TRANSACTION').length,
+      DISPUTE: events.filter(e => e.category === 'DISPUTE').length,
+      SYSTEM: events.filter(e => e.category === 'SYSTEM').length,
+    };
+
+    res.json({ user, events: trimmed, counts });
   } catch (err) { next(err); }
 });
 
