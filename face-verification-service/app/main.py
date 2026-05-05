@@ -131,6 +131,20 @@ async def health():
     return HealthResponse(status="ok", model_loaded=_engine is not None)
 
 
+@app.get("/diag/env")
+async def diag_env():
+    """Diagnostic — show installed library versions (no auth, public)."""
+    import sys
+    info = {"python": sys.version}
+    for mod in ("numpy", "torch", "torchvision", "easyocr", "insightface", "onnxruntime"):
+        try:
+            m = __import__(mod)
+            info[mod] = getattr(m, "__version__", "?")
+        except Exception as e:
+            info[mod] = f"IMPORT_FAIL: {type(e).__name__}: {e}"
+    return info
+
+
 # ── Face Capture ────────────────────────────────────────────────
 
 @app.post("/verify/capture-face", response_model=FaceCaptureResponse)
