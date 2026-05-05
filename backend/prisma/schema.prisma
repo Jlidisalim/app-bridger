@@ -61,7 +61,7 @@ model User {
   faceVerificationStatus String  @default("PENDING")  // PENDING, VERIFIED, FAILED
   faceVerifiedAt       DateTime?
   faceConfidenceScore  Float?
-  idDocumentNumber     String?                      // Extracted from ID card via OCR
+  idDocumentNumber     String?  @unique             // Extracted from ID card via OCR — enforced unique so the same ID card cannot back two accounts (NULLs are permitted)
 
   isAdmin       Boolean   @default(false)
   flagged       Boolean   @default(false)  // admin-flagged for review

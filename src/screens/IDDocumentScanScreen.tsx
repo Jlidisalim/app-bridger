@@ -49,6 +49,8 @@ export const IDDocumentScanScreen: React.FC<IDDocumentScanScreenProps> = ({
     success: boolean;
     confidence?: number;
     message: string;
+    idNumber?: string | null;
+    birthday?: string | null;
   } | null>(null);
 
   const {
@@ -122,6 +124,8 @@ export const IDDocumentScanScreen: React.FC<IDDocumentScanScreenProps> = ({
         success: result.success,
         confidence: result.face_confidence,
         message: displayMessage,
+        idNumber: result.id_number ?? null,
+        birthday: result.birthday ?? null,
       });
 
       if (!result.success) {
@@ -139,11 +143,10 @@ export const IDDocumentScanScreen: React.FC<IDDocumentScanScreenProps> = ({
       setKYCDocumentFront(documentImage);
       setFaceVerificationMessage('Document processed successfully');
 
-      // Store OCR-extracted identity fields
+      // Store OCR-extracted identity fields. The result panel above shows
+      // the user what was extracted; they click Continue to proceed.
       setExtractedIdNumber(result.id_number || null);
       setExtractedBirthday(result.birthday || null);
-
-      onContinue();
     } catch (error: any) {
       console.error('Document processing error:', error);
       setExtractionResult({
@@ -278,6 +281,18 @@ export const IDDocumentScanScreen: React.FC<IDDocumentScanScreenProps> = ({
                   Detection confidence: {(extractionResult.confidence * 100).toFixed(1)}%
                 </Typography>
               )}
+              {extractionResult.success && (
+                <Typography size="xs" color={COLORS.background.slate[600]} style={{ marginTop: 4 }}>
+                  {extractionResult.idNumber
+                    ? `ID number detected: ${extractionResult.idNumber}`
+                    : 'ID number could not be read — you can still continue'}
+                </Typography>
+              )}
+              {extractionResult.success && extractionResult.birthday && (
+                <Typography size="xs" color={COLORS.background.slate[600]}>
+                  Birthday detected: {extractionResult.birthday}
+                </Typography>
+              )}
             </View>
           </View>
         )}
@@ -291,14 +306,23 @@ export const IDDocumentScanScreen: React.FC<IDDocumentScanScreenProps> = ({
           </Typography>
         </View>
 
-        {/* Continue Button */}
-        <Button
-          label={isProcessing ? 'Processing...' : 'Process & Continue'}
-          onPress={handleProcessDocument}
-          loading={isProcessing}
-          disabled={!documentImage || isProcessing}
-          style={styles.continueButton}
-        />
+        {/* Continue Button — two-step: process first, then continue once
+            the extracted info is shown to the user above */}
+        {extractionResult?.success ? (
+          <Button
+            label="Continue"
+            onPress={onContinue}
+            style={styles.continueButton}
+          />
+        ) : (
+          <Button
+            label={isProcessing ? 'Processing...' : 'Process Document'}
+            onPress={handleProcessDocument}
+            loading={isProcessing}
+            disabled={!documentImage || isProcessing}
+            style={styles.continueButton}
+          />
+        )}
 
         <View style={{ height: 40 }} />
       </ScrollView>
