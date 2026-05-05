@@ -247,6 +247,7 @@ async def upload_id(request: Request, image: UploadFile = File(...)):
         document_face_bbox=result["bbox"],
         id_number=ocr_info.get("id_number"),
         birthday=ocr_info.get("birthday"),
+        ocr_debug=(ocr_info.get("raw_text") or "")[:300],
     )
 
 

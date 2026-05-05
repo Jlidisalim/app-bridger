@@ -35,6 +35,9 @@ class IDUploadResponse(BaseModel):
     # OCR-extracted fields (name/lastname entered manually by user)
     id_number: str | None = None
     birthday: str | None = None
+    # Debug — raw OCR text (truncated). Helps diagnose extraction issues
+    # in production where logs aren't easily reachable.
+    ocr_debug: str | None = None
 
 
 class CompareRequest(BaseModel):
