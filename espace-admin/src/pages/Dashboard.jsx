@@ -11,6 +11,7 @@
  * - Chart data falls back gracefully to empty arrays when the API is loading.
  */
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -18,10 +19,12 @@ import {
 import {
   Package, Users, CheckCircle2, DollarSign,
   Clock, ShieldAlert, UserCheck, Flag, AlertCircle, Loader2,
+  ArrowRight,
 } from 'lucide-react'
 import KpiCard from '../components/shared/KpiCard'
 import ChartCard from '../components/shared/ChartCard'
 import api from '../services/api'
+import DisputeCard from '../components/disputes/DisputeCard'
 
 // ── Colour palette ────────────────────────────────────────────────────────────
 const ROLE_COLORS   = ['#1A2E82', '#059669', '#D97706', '#6B7280']
@@ -138,24 +141,32 @@ function ConversionFunnel({ statusMap }) {
 
 // ── Dashboard page ────────────────────────────────────────────────────────────
 export default function Dashboard() {
-  const [stats,   setStats]   = useState(null)
-  const [tasks,   setTasks]   = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error,   setError]   = useState(null)
+  const navigate = useNavigate()
+  const [stats,    setStats]    = useState(null)
+  const [tasks,    setTasks]    = useState(null)
+  const [disputes, setDisputes] = useState([])
+  const [loading,  setLoading]  = useState(true)
+  const [error,    setError]    = useState(null)
 
-  // Fetch stats and tasks in parallel on mount
+  // Fetch stats, tasks, and disputes in parallel on mount
   useEffect(() => {
     Promise.all([
       api.get('/admin/stats'),
       api.get('/admin/tasks?status=OPEN&limit=5'),
+      api.get('/admin/disputes?status=ADMIN_REVIEWING&page=1&limit=3'),
     ])
-      .then(([statsRes, tasksRes]) => {
+      .then(([statsRes, tasksRes, disputesRes]) => {
         setStats(statsRes.data)
         setTasks(tasksRes.data)
+        setDisputes(disputesRes.data?.items || [])
       })
       .catch(err => setError(err.response?.data?.error || 'Failed to load dashboard data.'))
       .finally(() => setLoading(false))
   }, [])
+
+  function openDispute(id) {
+    navigate(`/disputes?focus=${id}`)
+  }
 
   // ── Derived chart data ────────────────────────────────────────────────
   const rolesData = stats?.usersByRole
@@ -257,6 +268,37 @@ export default function Dashboard() {
           accentColor="#D97706"
         />
       </div>
+
+      {/* Recent Disputes — clickable cards that open the dispute detail panel on /disputes */}
+      {disputes.length > 0 && (
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h2 className="text-base font-semibold text-on-surface flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-red-600" /> Disputes Awaiting Review
+              </h2>
+              <p className="text-xs text-on-surface-variant mt-0.5">
+                Click any card to open its full submission details
+              </p>
+            </div>
+            <button
+              onClick={() => navigate('/disputes')}
+              className="text-xs font-semibold text-primary hover:underline flex items-center gap-1"
+            >
+              View all <ArrowRight className="w-3 h-3" />
+            </button>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {disputes.map(d => (
+              <DisputeCard
+                key={d.id}
+                dispute={d}
+                onClick={() => openDispute(d.id)}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Activity + Matching + Roles */}
       <div className="grid grid-cols-3 gap-4">

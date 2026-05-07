@@ -44,6 +44,39 @@ export async function notifyAdminKycManualReview(payload: {
   ]);
 }
 
+export async function notifyAdminPaymentFailure(payload: {
+  kind: 'FAILURE' | 'REFUND';
+  stripeObjectId: string;
+  reasonCode: string | null;
+  reasonMessage: string;
+  amount?: number | null;
+  currency?: string | null;
+  userId?: string | null;
+}): Promise<void> {
+  const icon = payload.kind === 'FAILURE' ? '⚠️' : '↩️';
+  const headline = payload.kind === 'FAILURE' ? 'Stripe Payment Failed' : 'Stripe Refund Processed';
+  const amt =
+    payload.amount != null
+      ? `${Number(payload.amount).toFixed(2)} ${(payload.currency ?? 'USD').toUpperCase()}`
+      : '—';
+
+  const text = [
+    `${icon} *${headline}*`,
+    `Stripe object: \`${payload.stripeObjectId}\``,
+    `Amount: ${amt}`,
+    payload.userId ? `User: \`${payload.userId}\`` : null,
+    `Reason code: \`${payload.reasonCode ?? 'unspecified'}\``,
+    `Reason: ${payload.reasonMessage}`,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  await Promise.allSettled([
+    sendSlack(text),
+    sendEmail(`[Bridger] ${headline} — ${payload.stripeObjectId}`, text),
+  ]);
+}
+
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 async function sendSlack(text: string): Promise<void> {

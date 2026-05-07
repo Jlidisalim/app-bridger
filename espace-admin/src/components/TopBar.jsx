@@ -23,7 +23,6 @@ const PAGE_TITLES = {
   '/users':        'User Management',
   '/analytics':    'Analytics',
   '/moderation':   'Risk Assessment',
-  '/reports':      'Reports Central',
   '/transactions': 'Transactions',
 }
 

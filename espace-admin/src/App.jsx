@@ -14,7 +14,6 @@ import DealsEscrow from './pages/DealsEscrow'
 import ContentModeration from './pages/ContentModeration'
 import ShipmentPosts from './pages/ShipmentPosts'
 import TripPosts from './pages/TripPosts'
-import GeneratedReports from './pages/GeneratedReports'
 import Analytics from './pages/Analytics'
 import Disputes from './pages/Disputes'
 import AdminTasks from './pages/AdminTasks'
@@ -51,7 +50,6 @@ const router = createBrowserRouter([
       { path: 'trips',            element: <TripPosts /> },
       { path: 'moderation',       element: <ContentModeration /> },
       { path: 'content-moderation', element: <Navigate to="/moderation" replace /> },
-      { path: 'reports',          element: <GeneratedReports /> },
       { path: 'analytics',        element: <Analytics /> },
       { path: 'disputes',         element: <Disputes /> },
       { path: 'admin-tasks',      element: <AdminTasks /> },

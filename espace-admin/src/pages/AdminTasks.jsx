@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
-  ClipboardList, Clock, CheckCircle, XCircle, User, Mail, AlertCircle,
-  ChevronDown, Loader2, Search, RefreshCw, Trash2, MoreVertical,
-  Plus, X, ShieldAlert, Flame,
+  ClipboardList, Clock, CheckCircle, CheckCircle2, XCircle, User, Mail, AlertCircle,
+  ChevronDown, Hourglass, Loader2, Search, RefreshCw, Trash2,
+  MoreVertical, Plus, X, ShieldAlert, Flame, TrendingUp, CalendarCheck,
 } from 'lucide-react'
 import StatusBadge from '../components/shared/StatusBadge'
 import Pagination from '../components/shared/Pagination'
@@ -21,6 +21,7 @@ const TYPE_LABEL = {
   KYC_REVIEW:     'KYC Review',
   FRAUD_FLAG:     'Fraud Flag',
   REPORT:         'Report',
+  OTHER:          'Other',
 }
 
 const PRIORITY_META = {
@@ -28,12 +29,13 @@ const PRIORITY_META = {
   MEDIUM:   { label: 'Medium',   badge: 'bg-blue-100 text-blue-700' },
   HIGH:     { label: 'High',     badge: 'bg-orange-100 text-orange-700' },
   CRITICAL: { label: 'Critical', badge: 'bg-red-100 text-red-700' },
+  URGENT:   { label: 'Urgent',   badge: 'bg-red-100 text-red-700' },
 }
 
 // Notes are persisted as `[PRIORITY] TaskName — Description` so we can recover
 // priority on the client without a schema migration. Anything that doesn't
 // match is treated as MEDIUM with the raw notes as the description.
-const NOTES_RX = /^\[(LOW|MEDIUM|HIGH|CRITICAL)\]\s*(.*?)\s*(?:—|--)\s*([\s\S]*)$/
+const NOTES_RX = /^\[(LOW|MEDIUM|HIGH|CRITICAL|URGENT)\]\s*(.*?)\s*(?:—|--)\s*([\s\S]*)$/
 
 function encodeNotes({ priority, taskName, description }) {
   const p = priority || 'MEDIUM'
@@ -49,10 +51,17 @@ function decodeNotes(notes) {
   return { priority: m[1], taskName: m[2], description: m[3] }
 }
 
-// A task is high-risk if its priority is HIGH/CRITICAL or its type is a fraud flag.
+// A task counts as urgent if it's a Dispute or Risk-Assessment category, or
+// if an admin manually marked its importance as URGENT/HIGH/CRITICAL.
 function isHighRisk(task) {
   const { priority } = decodeNotes(task.notes)
-  return priority === 'HIGH' || priority === 'CRITICAL' || task.type === 'FRAUD_FLAG'
+  return (
+    priority === 'URGENT' ||
+    priority === 'HIGH' ||
+    priority === 'CRITICAL' ||
+    task.type === 'FRAUD_FLAG' ||
+    task.type === 'DISPUTE_REVIEW'
+  )
 }
 
 export default function AdminTasks() {
@@ -64,10 +73,21 @@ export default function AdminTasks() {
   const [statusFilter, setStatusFilter] = useState('OPEN')
   const [typeFilter,   setTypeFilter]   = useState('')
   const [searchInput,  setSearchInput]  = useState('')
-  const [searchQuery,  setSearchQuery]  = useState('')
   const [confirm,      setConfirm]      = useState(null)
   const [socket,       setSocket]       = useState(null)
   const [showCreate,   setShowCreate]   = useState(false)
+  // Local filter applied by the Urgent summary card — high-risk filter is
+  // computed from notes/type, so it can't be expressed as a server query.
+  const [urgentOnly,   setUrgentOnly]   = useState(false)
+
+  // Scroll target so clicking a summary card brings the matching list into view.
+  const tableRef = useRef(null)
+
+  // Admin-task summary (Total Pending / Weekly Completed / Urgent)
+  const [taskStats, setTaskStats] = useState({ totalPending: 0, weeklyCompleted: 0, urgent: 0 })
+
+  // Live-search query — filtering happens automatically as the user types.
+  const searchQuery = searchInput.trim().toLowerCase()
 
   const perPage = 15
 
@@ -90,6 +110,38 @@ export default function AdminTasks() {
 
   // Reset to page 1 whenever filters change.
   useEffect(() => { setPage(1) }, [statusFilter, typeFilter])
+
+  // Pull admin-task summary stats:
+  //   • totalPending   = OPEN + IN_PROGRESS counts
+  //   • weeklyCompleted = RESOLVED tasks whose updatedAt is within the last 7 days
+  //                       (resets naturally as the rolling 7-day window slides)
+  //   • urgent         = pending tasks flagged by isHighRisk (Dispute /
+  //                       Risk-Assessment categories or manual URGENT priority)
+  const fetchTaskStats = useCallback(() => {
+    Promise.all([
+      api.get('/admin/tasks?status=OPEN&limit=200').catch(() => ({ data: { total: 0, items: [] } })),
+      api.get('/admin/tasks?status=IN_PROGRESS&limit=200').catch(() => ({ data: { total: 0, items: [] } })),
+      api.get('/admin/tasks?status=RESOLVED&limit=200').catch(() => ({ data: { total: 0, items: [] } })),
+    ]).then(([opens, ips, resolved]) => {
+      const openTotal = opens.data.total || 0
+      const ipTotal   = ips.data.total   || 0
+      const pendingItems = [...(opens.data.items || []), ...(ips.data.items || [])]
+
+      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+      const weeklyCompleted = (resolved.data.items || []).filter(t => {
+        const ts = t.updatedAt || t.resolvedAt || t.createdAt
+        return ts && new Date(ts).getTime() >= sevenDaysAgo
+      }).length
+
+      setTaskStats({
+        totalPending:    openTotal + ipTotal,
+        weeklyCompleted,
+        urgent:          pendingItems.filter(isHighRisk).length,
+      })
+    })
+  }, [])
+
+  useEffect(() => { fetchTaskStats() }, [fetchTaskStats])
 
   // Socket.IO: listen for new admin tasks
   useEffect(() => {
@@ -117,21 +169,58 @@ export default function AdminTasks() {
     return () => { socketInstance.disconnect(); setSocket(null) }
   }, [typeFilter, statusFilter])
 
-  function handleSearch() {
-    setSearchQuery(searchInput.trim().toLowerCase())
-  }
-
   // Client-side search across the loaded page (notes/referenceId/type/id/assignedTo).
+  // Urgent-only filter is also applied here since high-risk classification lives
+  // on the client (notes encode priority).
   const visibleTasks = useMemo(() => {
-    if (!searchQuery) return tasks
-    return tasks.filter(t => {
+    let list = urgentOnly ? tasks.filter(isHighRisk) : tasks
+    if (!searchQuery) return list
+    return list.filter(t => {
       const haystack = [
         t.id, t.type, t.status, t.referenceId, t.assignedTo, t.notes,
         TYPE_LABEL[t.type] || '',
       ].filter(Boolean).join(' ').toLowerCase()
       return haystack.includes(searchQuery)
     })
-  }, [tasks, searchQuery])
+  }, [tasks, searchQuery, urgentOnly])
+
+  // Summary-card click handlers — each card jumps the list to the matching
+  // slice of work and scrolls the table into view. We also clear the search
+  // input so the user isn't surprised by a hidden text filter.
+  const scrollToTable = useCallback(() => {
+    requestAnimationFrame(() => {
+      tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }, [])
+
+  function handleViewPending() {
+    setStatusFilter('OPEN')
+    setTypeFilter('')
+    setUrgentOnly(false)
+    setSearchInput('')
+    scrollToTable()
+  }
+
+  function handleViewWeeklyCompleted() {
+    setStatusFilter('RESOLVED')
+    setTypeFilter('')
+    setUrgentOnly(false)
+    setSearchInput('')
+    scrollToTable()
+  }
+
+  function handleViewUrgent() {
+    setStatusFilter('OPEN')
+    setTypeFilter('')
+    setUrgentOnly(true)
+    setSearchInput('')
+    scrollToTable()
+  }
+
+  // Used to highlight the card whose filter is currently active.
+  const isPendingActive   = statusFilter === 'OPEN' && !typeFilter && !urgentOnly && !searchQuery
+  const isCompletedActive = statusFilter === 'RESOLVED' && !typeFilter && !urgentOnly && !searchQuery
+  const isUrgentActive    = urgentOnly
 
   function handleAssign(task) {
     const adminId = prompt('Enter admin userId to assign (or leave blank to self-assign):')
@@ -139,6 +228,7 @@ export default function AdminTasks() {
     api.patch(`/admin/tasks/${task.id}`, { assignedTo: assignee, status: 'IN_PROGRESS' })
       .then(() => {
         setTasks(prev => prev.map(t => t.id === task.id ? { ...t, assignedTo: assignee, status: 'IN_PROGRESS' } : t))
+        fetchTaskStats()
       })
       .catch(err => alert('Assign failed: ' + (err.response?.data?.error || err.message)))
   }
@@ -152,6 +242,7 @@ export default function AdminTasks() {
         try {
           await api.patch(`/admin/tasks/${task.id}`, { status: 'RESOLVED' })
           setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'RESOLVED' } : t))
+          fetchTaskStats()
         } catch (err) { alert('Close failed: ' + (err.response?.data?.error || err.message)) }
         setConfirm(null)
       },
@@ -168,6 +259,7 @@ export default function AdminTasks() {
           await api.delete(`/admin/tasks/${task.id}`)
           setTasks(prev => prev.filter(t => t.id !== task.id))
           setTotal(prev => prev - 1)
+          fetchTaskStats()
         } catch (err) { alert('Delete failed: ' + (err.response?.data?.error || err.message)) }
         setConfirm(null)
       },
@@ -185,6 +277,7 @@ export default function AdminTasks() {
       setTasks(prev => [newTask, ...prev])
       setTotal(prev => prev + 1)
     }
+    fetchTaskStats()
     setShowCreate(false)
   }
 
@@ -200,7 +293,7 @@ export default function AdminTasks() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={fetchTasks}
+            onClick={() => { fetchTasks(); fetchTaskStats() }}
             className="flex items-center gap-2 px-4 py-2 text-sm font-semibold border border-outline-variant rounded-lg hover:bg-surface-container-high transition-colors"
           >
             <RefreshCw className="w-4 h-4" /> Refresh
@@ -214,6 +307,27 @@ export default function AdminTasks() {
         </div>
       </div>
 
+      {/* Admin-task summary cards (Total Pending / Weekly Completed / Urgent).
+          Each card is an interactive button that jumps the list below to its
+          matching slice of work. */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <TotalPendingTasksCard
+          value={taskStats.totalPending}
+          onActivate={handleViewPending}
+          active={isPendingActive}
+        />
+        <WeeklyCompletedCard
+          value={taskStats.weeklyCompleted}
+          onActivate={handleViewWeeklyCompleted}
+          active={isCompletedActive}
+        />
+        <UrgentTasksCard
+          value={taskStats.urgent}
+          onActivate={handleViewUrgent}
+          active={isUrgentActive}
+        />
+      </div>
+
       {/* Error banner */}
       {error && (
         <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
@@ -224,35 +338,26 @@ export default function AdminTasks() {
       {/* Filters */}
       <div className="bg-surface-container-lowest rounded-xl p-4 border border-surface-container space-y-3">
         <div className="flex flex-wrap items-center gap-3">
-          {/* Search */}
+          {/* Live search — filters as the user types, no submit button. */}
           <div className="relative flex-1 min-w-[200px] max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant" />
             <input
               value={searchInput}
               onChange={e => setSearchInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleSearch() }}
               placeholder="Search tasks…"
-              className="w-full pl-9 pr-4 py-2 text-sm bg-surface-container rounded-lg border border-transparent focus:border-primary/30 outline-none"
+              className="w-full pl-9 pr-9 py-2 text-sm bg-surface-container rounded-lg border border-transparent focus:border-primary/30 outline-none"
             />
+            {searchInput && (
+              <button
+                type="button"
+                onClick={() => setSearchInput('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-surface-container-high"
+                title="Clear search"
+              >
+                <X className="w-3.5 h-3.5 text-on-surface-variant" />
+              </button>
+            )}
           </div>
-
-          <button
-            type="button"
-            onClick={handleSearch}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-surface-container hover:bg-surface-container-high border border-surface-container-high rounded-lg text-on-surface transition-colors"
-          >
-            <Search className="w-4 h-4" /> Search
-          </button>
-
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => { setSearchInput(''); setSearchQuery('') }}
-              className="text-xs text-on-surface-variant hover:text-on-surface px-2 py-1"
-            >
-              Clear search
-            </button>
-          )}
 
           {/* Status filter */}
           <div className="relative">
@@ -281,13 +386,29 @@ export default function AdminTasks() {
               <option value="KYC_REVIEW">KYC Review</option>
               <option value="FRAUD_FLAG">Fraud Flag</option>
               <option value="REPORT">Report</option>
+              <option value="OTHER">Other</option>
             </select>
             <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-on-surface-variant pointer-events-none" />
           </div>
+
+          {urgentOnly && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold rounded-full bg-red-100 text-red-700">
+              <ShieldAlert className="w-3 h-3" /> Urgent only
+              <button
+                type="button"
+                onClick={() => setUrgentOnly(false)}
+                aria-label="Clear urgent-only filter"
+                className="ml-0.5 -mr-1 p-0.5 rounded-full hover:bg-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
         </div>
       </div>
 
       {/* Table */}
+      <div ref={tableRef} className="scroll-mt-4">
       {loading ? (
         <div className="py-20 flex items-center justify-center">
           <Loader2 className="w-6 h-6 animate-spin text-primary opacity-50" />
@@ -378,10 +499,17 @@ export default function AdminTasks() {
                               <User className="w-4 h-4" />
                             </button>
                           )}
-                          {task.status !== 'RESOLVED' && (
+                          {task.status === 'RESOLVED' ? (
+                            <span
+                              className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 inline-flex transition-colors"
+                              title="Task completed"
+                            >
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600 fill-emerald-100" />
+                            </span>
+                          ) : (
                             <button
                               onClick={() => handleClose(task)}
-                              className="p-1.5 rounded-lg hover:bg-emerald-50 text-emerald-600 transition-colors"
+                              className="p-1.5 rounded-lg hover:bg-emerald-50 text-on-surface-variant hover:text-emerald-600 transition-colors"
                               title="Mark resolved"
                             >
                               <CheckCircle className="w-4 h-4" />
@@ -413,6 +541,7 @@ export default function AdminTasks() {
           )}
         </div>
       )}
+      </div>
 
       {/* Pagination */}
       {!loading && visibleTasks.length > 0 && !searchQuery && (
@@ -439,6 +568,159 @@ export default function AdminTasks() {
   )
 }
 
+// ── Admin-task summary cards ────────────────────────────────────────────────
+//
+// Each card is a real <button> so it gets keyboard activation (Enter / Space),
+// focus management, and screen-reader semantics for free. We layer hover
+// (scale + shadow), active (press-down), and focus-visible (ring) states on
+// top, plus an `aria-pressed` indicator that flips when the card's filter is
+// the currently-applied one.
+
+const CARD_BASE =
+  'group block w-full text-left relative rounded-2xl p-5 shadow-card-md overflow-hidden ' +
+  'transition-all duration-200 ease-out cursor-pointer ' +
+  'hover:shadow-xl hover:-translate-y-0.5 hover:scale-[1.015] ' +
+  'active:translate-y-0 active:scale-[0.99] ' +
+  'focus:outline-none focus-visible:outline-none ' +
+  'focus-visible:ring-4 focus-visible:ring-offset-2 focus-visible:ring-offset-surface'
+
+/** Total Pending Tasks — every incomplete task (OPEN + IN_PROGRESS). */
+function TotalPendingTasksCard({ value, onActivate, active }) {
+  return (
+    <button
+      type="button"
+      onClick={onActivate}
+      aria-pressed={active}
+      aria-label={`View ${Number(value).toLocaleString()} pending admin tasks`}
+      className={`${CARD_BASE} bg-gradient-to-br from-[#1A2E82] via-[#243aa3] to-[#3a52c4] focus-visible:ring-[#1A2E82]/50 ${
+        active ? 'ring-2 ring-white/70 ring-offset-2 ring-offset-surface' : ''
+      }`}
+    >
+      <ClipboardList className="absolute -right-3 -bottom-3 w-28 h-28 text-white/10 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3" strokeWidth={1.5} />
+      <div className="relative flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <div className="w-11 h-11 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center ring-1 ring-white/10 transition-colors group-hover:bg-white/25">
+            <ClipboardList className="w-5 h-5 text-white" />
+          </div>
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-white/80">
+            <Hourglass className="w-3 h-3" /> Awaiting action
+          </span>
+        </div>
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-white/70">Total pending tasks</p>
+          <p className="text-4xl font-extrabold text-white leading-none mt-1.5 tabular-nums">
+            {Number(value).toLocaleString()}
+          </p>
+          <p className="text-xs text-white/70 mt-2">All incomplete tasks across every queue</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-white/0 group-hover:text-white/90 group-focus-visible:text-white/90 mt-2 transition-colors" aria-hidden="true">
+            View pending →
+          </p>
+        </div>
+      </div>
+    </button>
+  )
+}
+
+/** Weekly Productivity — tasks marked done in the last 7 days (rolling window). */
+function WeeklyCompletedCard({ value, onActivate, active }) {
+  return (
+    <button
+      type="button"
+      onClick={onActivate}
+      aria-pressed={active}
+      aria-label={`View ${Number(value).toLocaleString()} tasks completed this week`}
+      className={`${CARD_BASE} bg-gradient-to-br from-emerald-50 to-emerald-100 border border-emerald-200 focus-visible:ring-emerald-400/60 ${
+        active ? 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-surface' : ''
+      }`}
+    >
+      <CalendarCheck className="absolute -right-3 -bottom-3 w-28 h-28 text-emerald-300/40 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3" strokeWidth={1.5} />
+      <div className="relative flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <div className="w-11 h-11 rounded-xl bg-emerald-500/15 flex items-center justify-center ring-1 ring-emerald-300 transition-colors group-hover:bg-emerald-500/25">
+            <CheckCircle2 className="w-5 h-5 text-emerald-700" />
+          </div>
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-emerald-800/80">
+            <TrendingUp className="w-3 h-3" /> This week
+          </span>
+        </div>
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-800/80">Tasks completed this week</p>
+          <p className="text-4xl font-extrabold text-emerald-900 leading-none mt-1.5 tabular-nums">
+            {Number(value).toLocaleString()}
+          </p>
+          <p className="text-xs text-emerald-800/80 mt-2">Resolved in the last 7 days — resets weekly</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-700/0 group-hover:text-emerald-800 group-focus-visible:text-emerald-800 mt-2 transition-colors" aria-hidden="true">
+            View resolved →
+          </p>
+        </div>
+      </div>
+    </button>
+  )
+}
+
+/** Urgent tasks — high-contrast red, with a pulsing dot for attention. */
+function UrgentTasksCard({ value, onActivate, active }) {
+  const isUrgent = value > 0
+  return (
+    <button
+      type="button"
+      onClick={onActivate}
+      disabled={!isUrgent}
+      aria-pressed={active}
+      aria-label={
+        isUrgent
+          ? `View ${Number(value).toLocaleString()} urgent admin tasks`
+          : 'No urgent tasks at this time'
+      }
+      className={`${CARD_BASE} focus-visible:ring-red-400/60 disabled:cursor-default disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:shadow-card-md ${
+        isUrgent
+          ? 'bg-gradient-to-br from-red-500 via-red-600 to-rose-700'
+          : 'bg-gradient-to-br from-slate-100 to-slate-200 border border-slate-200'
+      } ${active ? 'ring-2 ring-red-300 ring-offset-2 ring-offset-surface' : ''}`}
+    >
+      <ShieldAlert className={`absolute -right-3 -bottom-3 w-28 h-28 transition-transform duration-300 ${
+        isUrgent ? 'text-white/10 group-hover:scale-110 group-hover:rotate-3' : 'text-slate-300/60'
+      }`} strokeWidth={1.5} />
+      <div className="relative flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <div className={`w-11 h-11 rounded-xl flex items-center justify-center ring-1 transition-colors ${
+            isUrgent ? 'bg-white/15 backdrop-blur ring-white/20 group-hover:bg-white/25' : 'bg-slate-300/40 ring-slate-300'
+          }`}>
+            <ShieldAlert className={`w-5 h-5 ${isUrgent ? 'text-white' : 'text-slate-600'}`} />
+          </div>
+          {isUrgent ? (
+            <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-white">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white/70 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />
+              </span>
+              Action needed
+            </span>
+          ) : (
+            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">All clear</span>
+          )}
+        </div>
+        <div>
+          <p className={`text-[10px] font-bold uppercase tracking-widest ${isUrgent ? 'text-white/80' : 'text-slate-500'}`}>
+            Urgent tasks
+          </p>
+          <p className={`text-4xl font-extrabold leading-none mt-1.5 tabular-nums ${isUrgent ? 'text-white' : 'text-slate-700'}`}>
+            {Number(value).toLocaleString()}
+          </p>
+          <p className={`text-xs mt-2 ${isUrgent ? 'text-white/80' : 'text-slate-500'}`}>
+            Disputes, risk-assessment & manually-flagged urgent tasks
+          </p>
+          {isUrgent && (
+            <p className="text-[10px] font-bold uppercase tracking-widest text-white/0 group-hover:text-white/90 group-focus-visible:text-white/90 mt-2 transition-colors" aria-hidden="true">
+              Review now →
+            </p>
+          )}
+        </div>
+      </div>
+    </button>
+  )
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Create-task modal
 // ─────────────────────────────────────────────────────────────────────────────
@@ -456,9 +738,14 @@ function CreateTaskModal({ onClose, onCreated }) {
 
   const field = (k) => (v) => setForm(prev => ({ ...prev, [k]: v }))
 
-  // Detect HIGH/CRITICAL or FRAUD_FLAG → triggers automatic queue escalation.
+  // Importance ≥ HIGH, manual URGENT, or auto-urgent categories (FRAUD_FLAG /
+  // DISPUTE_REVIEW) all populate the Urgent Tasks card.
   const willEscalate =
-    form.priority === 'HIGH' || form.priority === 'CRITICAL' || form.type === 'FRAUD_FLAG'
+    form.priority === 'URGENT' ||
+    form.priority === 'HIGH' ||
+    form.priority === 'CRITICAL' ||
+    form.type === 'FRAUD_FLAG' ||
+    form.type === 'DISPUTE_REVIEW'
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -467,13 +754,20 @@ function CreateTaskModal({ onClose, onCreated }) {
     if (!form.taskName.trim())    return setError('Task name is required.')
     if (!form.referenceId.trim()) return setError('Reference ID is required.')
 
-    // Risk escalation: HIGH/CRITICAL or FRAUD_FLAG tasks are pinned to OPEN
-    // status so they show up immediately in the review queue, regardless of
-    // any assignee. Lower-priority tasks may go directly to IN_PROGRESS when
-    // an assignee is provided.
+    // Risk escalation: URGENT/HIGH/CRITICAL or FRAUD_FLAG/DISPUTE_REVIEW tasks
+    // are pinned to OPEN status so they appear immediately in the review queue,
+    // regardless of any assignee. Lower-importance tasks may go directly to
+    // IN_PROGRESS when an assignee is provided.
     const effectivePriority = form.type === 'FRAUD_FLAG' && form.priority === 'LOW'
       ? 'HIGH'      // FRAUD_FLAG can never be low risk
       : form.priority
+
+    const escalate =
+      effectivePriority === 'URGENT' ||
+      effectivePriority === 'HIGH' ||
+      effectivePriority === 'CRITICAL' ||
+      form.type === 'FRAUD_FLAG' ||
+      form.type === 'DISPUTE_REVIEW'
 
     const payload = {
       type:        form.type,
@@ -489,12 +783,9 @@ function CreateTaskModal({ onClose, onCreated }) {
     setSaving(true)
     try {
       const r = await api.post('/admin/tasks', payload)
-      // Force OPEN status for high-risk tasks even if backend assigned otherwise.
-      const created = (effectivePriority === 'HIGH' || effectivePriority === 'CRITICAL' || form.type === 'FRAUD_FLAG')
-        ? { ...r.data, status: 'OPEN' }
-        : r.data
-      if ((effectivePriority === 'HIGH' || effectivePriority === 'CRITICAL' || form.type === 'FRAUD_FLAG')
-          && r.data.status !== 'OPEN') {
+      // Force OPEN status for escalated tasks even if backend assigned otherwise.
+      const created = escalate ? { ...r.data, status: 'OPEN' } : r.data
+      if (escalate && r.data.status !== 'OPEN') {
         try { await api.patch(`/admin/tasks/${r.data.id}`, { status: 'OPEN' }) } catch {}
       }
       onCreated(created)
@@ -593,13 +884,14 @@ function CreateTaskModal({ onClose, onCreated }) {
                   <option value="KYC_REVIEW">KYC Review</option>
                   <option value="FRAUD_FLAG">Fraud Flag</option>
                   <option value="REPORT">Report</option>
+                  <option value="OTHER">Other</option>
                 </select>
                 <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-on-surface-variant pointer-events-none" />
               </div>
             </div>
             <div>
               <label className="text-[11px] font-semibold tracking-[0.12em] uppercase text-on-surface-variant block mb-1.5">
-                Priority
+                Level of Importance
               </label>
               <div className="relative">
                 <select
@@ -611,6 +903,7 @@ function CreateTaskModal({ onClose, onCreated }) {
                   <option value="MEDIUM">Medium</option>
                   <option value="HIGH">High (auto-escalate)</option>
                   <option value="CRITICAL">Critical (auto-escalate)</option>
+                  <option value="URGENT">Urgent (pins to Urgent Tasks)</option>
                 </select>
                 <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-on-surface-variant pointer-events-none" />
               </div>

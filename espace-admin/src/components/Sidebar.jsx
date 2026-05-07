@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Package, MapPin, CreditCard, Users,
-  BarChart2, ShieldCheck, FileText, HelpCircle, MessageSquare, LogOut, Zap,
+  BarChart2, ShieldCheck, HelpCircle, MessageSquare, LogOut, Zap,
   Gavel, ClipboardList, FileSearch, TrendingUp, History,
 } from 'lucide-react'
 
@@ -38,10 +38,6 @@ const SECTIONS = [
       { path: '/pricing',      icon: TrendingUp,      label: 'Pricing Data' },
       { path: '/transaction-history', icon: History,   label: 'Transaction History' },
     ],
-  },
-  {
-    label: 'System',
-    items: [{ path: '/reports', icon: FileText, label: 'Reports' }],
   },
 ]
 

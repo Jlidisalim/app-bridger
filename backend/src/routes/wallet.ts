@@ -6,6 +6,13 @@ import { depositSchema, withdrawSchema, walletFiltersSchema } from '../validator
 import { prisma } from '../config/db';
 import { getIO } from '../services/websocket';
 import { createWithdrawal, createStripeConnectOnboardingUrl } from '../services/paymentService';
+import {
+  annotateStripeAndTransaction,
+  extractPaymentIntentFailure,
+  extractChargeFailure,
+  extractRefundReason,
+} from '../services/stripeAnnotationService';
+import { notifyAdminPaymentFailure } from '../services/adminNotificationService';
 import logger from '../utils/logger';
 
 const router = Router();
@@ -519,24 +526,176 @@ router.post('/webhook', async (req, res, next) => {
         break;
       }
 
-      // FIX 12: Handle charge.refunded
+      // ── Failed PaymentIntent: annotate Stripe + mark our transaction FAILED.
+      case 'payment_intent.payment_failed': {
+        const pi = event.data.object;
+        const { reasonCode, reasonMessage } = extractPaymentIntentFailure(pi);
+
+        await prisma.transaction.updateMany({
+          where: { stripeId: pi.id, status: 'PENDING' },
+          data: { status: 'FAILED' },
+        });
+
+        await annotateStripeAndTransaction({
+          eventId: event.id,
+          objectKind: 'payment_intent',
+          objectId: pi.id,
+          existingMetadata: pi.metadata,
+          existingDescription: pi.description,
+          reasonType: 'FAILURE',
+          reasonCode,
+          reasonMessage,
+          amount: pi.amount != null ? pi.amount / 100 : null,
+          currency: pi.currency,
+        });
+
+        await notifyAdminPaymentFailure({
+          kind: 'FAILURE',
+          stripeObjectId: pi.id,
+          reasonCode,
+          reasonMessage,
+          amount: pi.amount != null ? pi.amount / 100 : null,
+          currency: pi.currency,
+          userId: pi.metadata?.userId ?? null,
+        });
+
+        if (io && pi.metadata?.userId) {
+          io.to(`user:${pi.metadata.userId}`).emit('payment_failed', {
+            stripeId: pi.id, reasonCode, reasonMessage,
+          });
+        }
+        break;
+      }
+
+      // ── Failed Charge: same shape, but the failure data lives on the charge.
+      case 'charge.failed': {
+        const charge = event.data.object;
+        const { reasonCode, reasonMessage } = extractChargeFailure(charge);
+        const paymentIntentId = charge.payment_intent as string | null;
+
+        if (paymentIntentId) {
+          await prisma.transaction.updateMany({
+            where: { stripeId: paymentIntentId, status: 'PENDING' },
+            data: { status: 'FAILED' },
+          });
+        }
+
+        await annotateStripeAndTransaction({
+          eventId: event.id,
+          objectKind: 'charge',
+          objectId: charge.id,
+          existingMetadata: charge.metadata,
+          existingDescription: charge.description,
+          reasonType: 'FAILURE',
+          reasonCode,
+          reasonMessage,
+          amount: charge.amount != null ? charge.amount / 100 : null,
+          currency: charge.currency,
+        });
+
+        await notifyAdminPaymentFailure({
+          kind: 'FAILURE',
+          stripeObjectId: charge.id,
+          reasonCode,
+          reasonMessage,
+          amount: charge.amount != null ? charge.amount / 100 : null,
+          currency: charge.currency,
+          userId: charge.metadata?.userId ?? null,
+        });
+        break;
+      }
+
+      // ── Charge fully refunded: keep status sync, attach refund reason note.
       case 'charge.refunded': {
         const charge = event.data.object;
         const paymentIntentId = charge.payment_intent as string;
+        // The refund object is in charge.refunds.data — most-recent first is
+        // not guaranteed, so pick by created-desc.
+        const refunds = (charge.refunds?.data ?? []) as any[];
+        const latestRefund = refunds.sort((a, b) => (b.created || 0) - (a.created || 0))[0];
+
         if (paymentIntentId) {
           await prisma.transaction.updateMany({
             where: { stripeId: paymentIntentId, status: 'COMPLETED' },
             data: { status: 'REFUNDED' },
           });
-          const tx = await prisma.transaction.findFirst({ where: { stripeId: paymentIntentId } });
-          if (tx && io) {
-            io.to(`user:${tx.userId}`).emit('refund_processed', { stripeId: paymentIntentId });
-          }
+        }
+
+        const reason = latestRefund
+          ? extractRefundReason(latestRefund)
+          : { reasonCode: 'unspecified', reasonMessage: `Charge ${charge.id} was refunded.` };
+
+        await annotateStripeAndTransaction({
+          eventId: event.id,
+          objectKind: 'charge',
+          objectId: charge.id,
+          existingMetadata: charge.metadata,
+          existingDescription: charge.description,
+          reasonType: 'REFUND',
+          reasonCode: reason.reasonCode,
+          reasonMessage: reason.reasonMessage,
+          amount: charge.amount_refunded != null ? charge.amount_refunded / 100 : null,
+          currency: charge.currency,
+        });
+
+        await notifyAdminPaymentFailure({
+          kind: 'REFUND',
+          stripeObjectId: charge.id,
+          reasonCode: reason.reasonCode,
+          reasonMessage: reason.reasonMessage,
+          amount: charge.amount_refunded != null ? charge.amount_refunded / 100 : null,
+          currency: charge.currency,
+          userId: charge.metadata?.userId ?? null,
+        });
+
+        const tx = paymentIntentId
+          ? await prisma.transaction.findFirst({ where: { stripeId: paymentIntentId } })
+          : null;
+        if (tx && io) {
+          io.to(`user:${tx.userId}`).emit('refund_processed', { stripeId: paymentIntentId });
         }
         break;
       }
 
-      // FIX 12: Handle transfer.failed
+      // ── Refund object created or status updated (covers async ACH refunds
+      //    that resolve later). Annotate the refund object itself.
+      case 'refund.created':
+      case 'refund.updated': {
+        const refund = event.data.object;
+        const reason = extractRefundReason(refund);
+        const isFailure = !!refund.failure_reason;
+
+        await annotateStripeAndTransaction({
+          eventId: event.id,
+          objectKind: 'refund',
+          objectId: refund.id,
+          existingMetadata: refund.metadata,
+          existingDescription: null, // refunds have no description field
+          reasonType: isFailure ? 'FAILURE' : 'REFUND',
+          reasonCode: reason.reasonCode,
+          reasonMessage: reason.reasonMessage,
+          amount: refund.amount != null ? refund.amount / 100 : null,
+          currency: refund.currency,
+        });
+
+        // Only alert admins for refund failures or first creation of large refunds.
+        if (isFailure) {
+          await notifyAdminPaymentFailure({
+            kind: 'FAILURE',
+            stripeObjectId: refund.id,
+            reasonCode: reason.reasonCode,
+            reasonMessage: reason.reasonMessage,
+            amount: refund.amount != null ? refund.amount / 100 : null,
+            currency: refund.currency,
+            userId: refund.metadata?.userId ?? null,
+          });
+        }
+        break;
+      }
+
+      // ── Failed Connect transfer (existing flow): keep re-credit + admin
+      //    task, plus annotate the underlying charge so the reason surfaces
+      //    in the Stripe dashboard alongside the rest of the lifecycle.
       case 'transfer.failed': {
         const transfer = event.data.object;
         const transferId = transfer.id as string;
@@ -552,12 +711,10 @@ router.post('/webhook', async (req, res, next) => {
                 metadata: JSON.stringify({ failureReason: transfer.failure_message }),
               },
             }),
-            // Re-credit the traveler
             prisma.user.update({
               where: { id: failedTx.userId },
               data: { walletBalance: { increment: Number(failedTx.amount) } },
             }),
-            // Admin task for investigation
             prisma.adminTask.create({
               data: {
                 type: 'TRANSFER_FAILED',
@@ -567,6 +724,30 @@ router.post('/webhook', async (req, res, next) => {
               },
             }),
           ]);
+
+          await annotateStripeAndTransaction({
+            eventId: event.id,
+            objectKind: 'charge',
+            objectId: transfer.source_transaction || transferId,
+            existingMetadata: transfer.metadata,
+            existingDescription: transfer.description,
+            reasonType: 'FAILURE',
+            reasonCode: transfer.failure_code ?? 'transfer_failed',
+            reasonMessage: transfer.failure_message ?? 'Stripe Connect transfer failed.',
+            amount: transfer.amount != null ? transfer.amount / 100 : null,
+            currency: transfer.currency,
+          });
+
+          await notifyAdminPaymentFailure({
+            kind: 'FAILURE',
+            stripeObjectId: transferId,
+            reasonCode: transfer.failure_code ?? 'transfer_failed',
+            reasonMessage: transfer.failure_message ?? 'Stripe Connect transfer failed.',
+            amount: transfer.amount != null ? transfer.amount / 100 : null,
+            currency: transfer.currency,
+            userId: failedTx.userId,
+          });
+
           if (io) {
             io.to(`user:${failedTx.userId}`).emit('transfer_failed', {
               amount: failedTx.amount,

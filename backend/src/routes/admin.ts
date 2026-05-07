@@ -263,7 +263,24 @@ router.get('/transactions', async (req: Request, res: Response, next: NextFuncti
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
-        include: { user: { select: { id: true, name: true, phone: true } } },
+        include: {
+          user: { select: { id: true, name: true, phone: true } },
+          deal: {
+            select: {
+              id: true,
+              title: true,
+              status: true,
+              price: true,
+              currency: true,
+              fromCity: true,
+              toCity: true,
+              fromCountry: true,
+              toCountry: true,
+              sender:   { select: { id: true, name: true, phone: true } },
+              traveler: { select: { id: true, name: true, phone: true } },
+            },
+          },
+        },
       }),
       prisma.transaction.count({ where }),
     ]);
@@ -602,14 +619,26 @@ router.patch('/reviews/:id/dismiss', async (req: Request, res: Response, next: N
 
 // ── Admin Disputes List ───────────────────────────────────────────────────────
 
-/** GET /admin/disputes?page=1&limit=15&status=ADMIN_REVIEWING — paginated dispute list for admins */
+/**
+ * GET /admin/disputes?page=1&limit=15&status=ADMIN_REVIEWING
+ * `status` accepts a single value or a comma-separated list
+ * (e.g. status=OPENED,EVIDENCE_SUBMITTED) — paginated dispute list for admins
+ */
 router.get('/disputes', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const page  = Math.max(1, Number(req.query.page)  || 1);
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 15));
     const skip  = (page - 1) * limit;
     const where: any = {};
-    if (req.query.status) where.status = String(req.query.status);
+    if (req.query.status) {
+      const parts = String(req.query.status).split(',').map(s => s.trim()).filter(Boolean);
+      if (parts.length === 1) where.status = parts[0];
+      else if (parts.length > 1) where.status = { in: parts };
+    }
+    if (req.query.since) {
+      const since = new Date(String(req.query.since));
+      if (!isNaN(since.getTime())) where.updatedAt = { gte: since };
+    }
 
     const [disputes, total] = await prisma.$transaction([
       prisma.dispute.findMany({
@@ -618,10 +647,11 @@ router.get('/disputes', async (req: Request, res: Response, next: NextFunction) 
         take: limit,
         orderBy: { createdAt: 'desc' },
         include: {
-          deal:     { select: { id: true, fromCity: true, toCity: true, price: true } },
-          filer:    { select: { id: true, name: true, avatar: true } },
-          against:  { select: { id: true, name: true, avatar: true } },
+          deal:     { select: { id: true, fromCity: true, toCity: true, price: true, status: true } },
+          filer:    { select: { id: true, name: true, avatar: true, phone: true } },
+          against:  { select: { id: true, name: true, avatar: true, phone: true } },
           evidences: { orderBy: { createdAt: 'asc' } },
+          _count:   { select: { messages: true, timeline: true, evidences: true } },
         },
       }),
       prisma.dispute.count({ where }),
@@ -638,10 +668,26 @@ router.get('/disputes', async (req: Request, res: Response, next: NextFunction) 
     const taskByDisputeId: Record<string, { id: string; assignedTo: string | null }> =
       Object.fromEntries(adminTasks.map(t => [t.referenceId, { id: t.id, assignedTo: t.assignedTo }]));
 
+    // Resolve admin names for assignedTo and resolvedById
+    const adminIds = Array.from(new Set([
+      ...adminTasks.map(t => t.assignedTo).filter(Boolean) as string[],
+      ...disputes.map(d => d.resolvedById).filter(Boolean) as string[],
+    ]));
+    const adminUsers = adminIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: adminIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const adminById: Record<string, { id: string; name: string | null }> =
+      Object.fromEntries(adminUsers.map(u => [u.id, u]));
+
     const items = disputes.map(d => ({
       ...d,
-      adminTaskId: taskByDisputeId[d.id]?.id ?? null,
-      assignedTo:  taskByDisputeId[d.id]?.assignedTo ?? null,
+      adminTaskId:    taskByDisputeId[d.id]?.id ?? null,
+      assignedTo:     taskByDisputeId[d.id]?.assignedTo ?? null,
+      assignedAdmin:  taskByDisputeId[d.id]?.assignedTo ? adminById[taskByDisputeId[d.id]!.assignedTo!] ?? null : null,
+      resolvedBy:     d.resolvedById ? adminById[d.resolvedById] ?? null : null,
     }));
 
     res.json({ items, total, page, limit, hasMore: skip + limit < total });

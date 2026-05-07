@@ -63,6 +63,15 @@ export default {
         'card-md': '0 32px 64px -15px rgba(30,58,138,0.06)',
         topbar: '0 32px 64px -15px rgba(30,58,138,0.06)',
       },
+      keyframes: {
+        'slide-in-right': {
+          '0%': { transform: 'translateX(100%)' },
+          '100%': { transform: 'translateX(0)' },
+        },
+      },
+      animation: {
+        'slide-in-right': 'slide-in-right 200ms ease-out',
+      },
     },
   },
   plugins: [],

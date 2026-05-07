@@ -648,7 +648,7 @@ export const DisputeScreen: React.FC<DisputeScreenProps> = ({ deal, onBack }) =>
               {readOnly
                 ? `This dispute is closed. ${dispute.resolution ?? ''}`
                 : status === 'ADMIN_REVIEWING'
-                ? 'A Bridger mediator is reviewing the evidence. Resolution expected within 24 hours.'
+                ? 'A Bridger mediator is reviewing the evidence. Resolution expected within 72 hours.'
                 : status === 'EVIDENCE_SUBMITTED'
                 ? 'Evidence has been submitted. Waiting for the other party to respond.'
                 : `Add supporting evidence and use the conversation below. SLA: ${formatDateTime(
