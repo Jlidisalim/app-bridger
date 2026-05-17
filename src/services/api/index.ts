@@ -159,9 +159,10 @@ export const dealsApi = {
     return apiClient.delete(`/deals/${dealId}`);
   },
 
-  // Accept deal (traveler)
-  acceptDeal: async (dealId: string): Promise<ApiResponse<Deal>> => {
-    return apiClient.post(`/deals/${dealId}/match`, {});
+  // Traveler asks to carry a sender's deal. Creates a PENDING request;
+  // the sender must accept it before the deal becomes MATCHED.
+  acceptDeal: async (dealId: string, price?: number): Promise<ApiResponse<{ request: { id: string } }>> => {
+    return apiClient.post(`/deals/${dealId}/match`, price != null ? { price } : {});
   },
 
   // Counter offer

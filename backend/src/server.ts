@@ -345,9 +345,13 @@ async function main() {
     // Start tracking subsystem: watchdog for stale GPS sessions + restore in-flight polls.
     const { startGpsWatchdog } = await import('./services/tracking/tracking.service');
     const { restoreActiveFlightPolls } = await import('./services/tracking/flightPoller');
+    const { restoreActiveVesselPolls } = await import('./services/tracking/vesselPoller');
     startGpsWatchdog();
     restoreActiveFlightPolls().catch((e) =>
       logger.warn('restoreActiveFlightPolls failed', { error: String(e) }),
+    );
+    restoreActiveVesselPolls().catch((e) =>
+      logger.warn('restoreActiveVesselPolls failed', { error: String(e) }),
     );
 
     httpServer.listen(PORT, () => {

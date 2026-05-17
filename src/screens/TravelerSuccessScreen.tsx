@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACING, RADIUS } from '../theme/theme';
 import { Typography } from '../components/Typography';
 import { Button } from '../components/Button';
-import { CheckCircle2, Plane, Sparkles, Copy, Share2, QrCode, ArrowRight } from 'lucide-react-native';
+import { CheckCircle2, Compass, Sparkles, Copy, Share2, QrCode, ArrowRight } from 'lucide-react-native';
 import { QRCodeGenerator } from '../components/QRCodeGenerator';
 import { dealsAPI } from '../services/api';
 import { useAppStore } from '../store/useAppStore';
@@ -81,7 +81,7 @@ export const TravelerSuccessScreen: React.FC<TravelerSuccessScreenProps> = ({ tr
                 <View style={styles.iconContainer}>
                     <View style={styles.pulseRing} />
                     <View style={styles.mainIcon}>
-                        <Plane color={COLORS.white} size={48} style={{ transform: [{ rotate: '45deg' }] }} />
+                        <Compass color={COLORS.white} size={48} />
                     </View>
                     <View style={styles.sparkleBox}>
                         <Sparkles color="#f59e0b" size={24} />

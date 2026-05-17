@@ -16,19 +16,20 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { Plane, MapPin, X } from 'lucide-react-native';
+import { Plane, MapPin, Ship, X } from 'lucide-react-native';
 import { COLORS, RADIUS, SPACING } from '../../theme/theme';
 import { Typography } from '../Typography';
 
-type Mode = 'gps' | 'flight';
+type Mode = 'gps' | 'flight' | 'boat';
 
 interface Props {
   visible: boolean;
   onClose: () => void;
   defaultMode?: Mode;
   defaultCallsign?: string;
+  defaultMmsi?: string;
   loading?: boolean;
-  onActivate: (mode: Mode, callsign?: string) => Promise<void> | void;
+  onActivate: (mode: Mode, opts: { callsign?: string; mmsi?: number }) => Promise<void> | void;
 }
 
 export const TrackingModeSheet: React.FC<Props> = ({
@@ -36,11 +37,13 @@ export const TrackingModeSheet: React.FC<Props> = ({
   onClose,
   defaultMode = 'gps',
   defaultCallsign,
+  defaultMmsi,
   loading = false,
   onActivate,
 }) => {
   const [selected, setSelected] = useState<Mode>(defaultMode);
   const [callsign, setCallsign] = useState(defaultCallsign ?? '');
+  const [mmsi, setMmsi] = useState(defaultMmsi ?? '');
   const [touched, setTouched] = useState(false);
 
   const slide = useRef(new Animated.Value(0)).current;
@@ -49,6 +52,7 @@ export const TrackingModeSheet: React.FC<Props> = ({
     if (visible) {
       setSelected(defaultMode);
       setCallsign(defaultCallsign ?? '');
+      setMmsi(defaultMmsi ?? '');
       setTouched(false);
       Animated.timing(slide, {
         toValue: 1,
@@ -59,7 +63,7 @@ export const TrackingModeSheet: React.FC<Props> = ({
     } else {
       Animated.timing(slide, { toValue: 0, duration: 220, useNativeDriver: true }).start();
     }
-  }, [visible, defaultMode, defaultCallsign, slide]);
+  }, [visible, defaultMode, defaultCallsign, defaultMmsi, slide]);
 
   const callsignError = (() => {
     if (selected !== 'flight') return null;
@@ -69,12 +73,32 @@ export const TrackingModeSheet: React.FC<Props> = ({
     return null;
   })();
 
-  const canSubmit = !loading && (selected === 'gps' || (callsign.trim().length >= 3 && !callsignError));
+  const mmsiError = (() => {
+    if (selected !== 'boat') return null;
+    const cleaned = mmsi.replace(/\D+/g, '');
+    if (cleaned.length === 0) return touched ? 'Enter the vessel MMSI' : null;
+    if (cleaned.length !== 9)  return touched ? 'MMSI must be 9 digits' : null;
+    return null;
+  })();
+
+  const canSubmit =
+    !loading &&
+    (
+      selected === 'gps' ||
+      (selected === 'flight' && callsign.trim().length >= 3 && !callsignError) ||
+      (selected === 'boat'   && mmsi.replace(/\D+/g, '').length === 9 && !mmsiError)
+    );
 
   const submit = async () => {
     setTouched(true);
     if (!canSubmit) return;
-    await onActivate(selected, selected === 'flight' ? callsign.trim().toUpperCase() : undefined);
+    if (selected === 'flight') {
+      await onActivate('flight', { callsign: callsign.trim().toUpperCase() });
+    } else if (selected === 'boat') {
+      await onActivate('boat', { mmsi: parseInt(mmsi.replace(/\D+/g, ''), 10) });
+    } else {
+      await onActivate('gps', {});
+    }
   };
 
   const translateY = slide.interpolate({ inputRange: [0, 1], outputRange: [400, 0] });
@@ -126,6 +150,15 @@ export const TrackingModeSheet: React.FC<Props> = ({
             accent={COLORS.info}
           />
 
+          <ModeCard
+            selected={selected === 'boat'}
+            onPress={() => setSelected('boat')}
+            icon={<Ship size={22} color="#22d3ee" />}
+            title="Boat tracking"
+            subtitle="Track your vessel via AISHub (AIS)"
+            accent="#22d3ee"
+          />
+
           {selected === 'flight' && (
             <View style={styles.callsignGroup}>
               <Typography size="sm" color={COLORS.background.slate[700]} weight="medium">
@@ -152,6 +185,33 @@ export const TrackingModeSheet: React.FC<Props> = ({
             </View>
           )}
 
+          {selected === 'boat' && (
+            <View style={styles.callsignGroup}>
+              <Typography size="sm" color={COLORS.background.slate[700]} weight="medium">
+                Vessel MMSI
+              </Typography>
+              <TextInput
+                value={mmsi}
+                onChangeText={(v) => setMmsi(v.replace(/\D+/g, '').slice(0, 9))}
+                placeholder="9-digit MMSI, e.g. 244750034"
+                placeholderTextColor={COLORS.background.slate[400]}
+                keyboardType="number-pad"
+                autoCorrect={false}
+                maxLength={9}
+                style={[
+                  styles.input,
+                  mmsiError ? { borderColor: COLORS.error } : undefined,
+                ]}
+                onBlur={() => setTouched(true)}
+              />
+              {mmsiError && (
+                <Typography size="xs" color={COLORS.error} style={{ marginTop: 4 }}>
+                  {mmsiError}
+                </Typography>
+              )}
+            </View>
+          )}
+
           <Pressable
             onPress={submit}
             disabled={!canSubmit}
@@ -164,7 +224,11 @@ export const TrackingModeSheet: React.FC<Props> = ({
               <ActivityIndicator color="#fff" />
             ) : (
               <Typography size="md" weight="bold" color="#fff">
-                {selected === 'gps' ? 'Start GPS tracking' : 'Start flight tracking'}
+                {selected === 'gps'
+                  ? 'Start GPS tracking'
+                  : selected === 'flight'
+                    ? 'Start flight tracking'
+                    : 'Start boat tracking'}
               </Typography>
             )}
           </Pressable>

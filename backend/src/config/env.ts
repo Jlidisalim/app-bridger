@@ -89,6 +89,10 @@ const envSchema = z.object({
   OPENSKY_CLIENT_SECRET: z.string().optional(),
   OPENSKY_POLL_INTERVAL_MS: z.coerce.number().default(30_000),
   OPENSKY_GPS_LOSS_THRESHOLD_MS: z.coerce.number().default(120_000),
+
+  // AISHub (vessel tracking)
+  AISHUB_USERNAME: z.string().optional(),
+  AISHUB_POLL_INTERVAL_MS: z.coerce.number().default(60_000),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;
@@ -204,6 +208,12 @@ export const config = {
     clientSecret: env.OPENSKY_CLIENT_SECRET,
     pollIntervalMs: env.OPENSKY_POLL_INTERVAL_MS,
     gpsLossThresholdMs: env.OPENSKY_GPS_LOSS_THRESHOLD_MS,
+  },
+
+  // AISHub (vessel tracking)
+  aishub: {
+    username:       env.AISHUB_USERNAME,
+    pollIntervalMs: env.AISHUB_POLL_INTERVAL_MS,
   },
 };
 

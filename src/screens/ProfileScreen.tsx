@@ -40,6 +40,7 @@ import {
     AlertTriangle,
     ScrollText,
     X,
+    Inbox,
 } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
@@ -82,14 +83,17 @@ interface ProfileScreenProps {
     onEditProfile?: () => void;
     onHelp?: () => void;
     onNotifications?: () => void;
+    onReceivedPackages?: () => void;
 }
 
-export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onHome, onExplore, onCreate, onMessages, onProfile, onWallet, onSettings, onEditProfile, onHelp, onNotifications }) => {
+export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onHome, onExplore, onCreate, onMessages, onProfile, onWallet, onSettings, onEditProfile, onHelp, onNotifications, onReceivedPackages }) => {
     const logout = useAppStore((s) => s.logout);
     const user = useAppStore((s) => s.currentUser);
     const setCurrentUser = useAppStore((s) => s.setCurrentUser);
     const deals = useAppStore((s) => s.deals);
     const fetchDeals = useAppStore((s) => s.fetchDeals);
+    const receivedPackages = useAppStore((s) => s.receivedPackages);
+    const fetchReceivedPackages = useAppStore((s) => s.fetchReceivedPackages);
 
     const [refreshing, setRefreshing] = useState(false);
     const [stats, setStats] = useState<{ completionRate: number; totalDeals: number; rating: number } | null>(null);
@@ -124,12 +128,13 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onHome, onExplore,
             }
             // Pull deals so the locally derived completion fallback stays current.
             fetchDeals().catch(() => {});
+            fetchReceivedPackages().catch(() => {});
         } catch {
             // non-critical — keep current values
         } finally {
             setRefreshing(false);
         }
-    }, [setCurrentUser, fetchDeals, user]);
+    }, [setCurrentUser, fetchDeals, fetchReceivedPackages, user]);
 
     useEffect(() => {
         refreshProfile();
@@ -313,6 +318,16 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onHome, onExplore,
                             <View style={[styles.verificationTag, { backgroundColor: verificationStyle.bg }]}>
                                 <Typography size="xs" weight="bold" color={verificationStyle.fg}>{verification.label}</Typography>
                             </View>
+                            <ChevronRight color={COLORS.background.slate[300]} size={18} />
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.listItem} onPress={onReceivedPackages}>
+                            <Inbox color={COLORS.background.slate[500]} size={20} />
+                            <Typography size="sm" weight="semibold" style={styles.flex1}>Packages for me</Typography>
+                            {receivedPackages.length > 0 && (
+                                <View style={styles.countBadge}>
+                                    <Typography size="xs" weight="bold" color={COLORS.white}>{receivedPackages.length}</Typography>
+                                </View>
+                            )}
                             <ChevronRight color={COLORS.background.slate[300]} size={18} />
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.listItem} onPress={onWallet}>
@@ -623,6 +638,16 @@ const styles = StyleSheet.create({
         paddingHorizontal: 8,
         paddingVertical: 2,
         borderRadius: 4,
+        marginRight: 4,
+    },
+    countBadge: {
+        minWidth: 22,
+        height: 22,
+        paddingHorizontal: 6,
+        borderRadius: 11,
+        backgroundColor: COLORS.primary,
+        alignItems: 'center',
+        justifyContent: 'center',
         marginRight: 4,
     },
     deleteBtn: {

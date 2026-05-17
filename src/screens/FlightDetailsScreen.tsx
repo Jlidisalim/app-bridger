@@ -120,14 +120,14 @@ export const FlightDetailsScreen: React.FC<FlightDetailsScreenProps> = ({ onNext
                 <View style={styles.stepInfoContainer}>
                     <View style={styles.stepHeaderRow}>
                         <Typography size="xs" weight="bold" color="#1E3B8A" style={{ letterSpacing: 1 }}>
-                            STEP 2: FLIGHT DETAILS
+                            STEP 1: FLIGHT DETAILS
                         </Typography>
-                        <Typography size="sm" color={COLORS.background.slate[500]}>2 of 5</Typography>
+                        <Typography size="sm" color={COLORS.background.slate[500]}>1 of 5</Typography>
                     </View>
 
                     {/* Progress Bar */}
                     <View style={styles.progressBarContainer}>
-                        <View style={[styles.progressBarFill, { width: '40%' }]} />
+                        <View style={[styles.progressBarFill, { width: '20%' }]} />
                     </View>
                 </View>
 

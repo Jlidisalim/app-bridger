@@ -190,7 +190,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         if (sortBy === 'date') return new Date(b.pickupDate || b.createdAt || 0).getTime() - new Date(a.pickupDate || a.createdAt || 0).getTime();
         if (sortBy === 'price') return (a.price ?? 0) - (b.price ?? 0);
         return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
-    });
+    }).map((d: any) => ({ ...d, _type: 'shipment' }));
 
     // Other people's OPEN trips (excluding own posts)
     const filteredTrips = trips.map(normTrip).filter((trip: any) => {
@@ -203,15 +203,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         return true;
     }).sort((a: any, b: any) =>
         new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-    );
+    ).map((t: any) => ({ ...t, _type: 'trip' }));
 
     // My Posts — my deals + trips, excluding cancelled items (soft-deleted)
     const myDeals = deals.map(normDeal)
         .filter((d: any) => isMyDeal(d) && d.status !== 'CANCELLED')
-        .map((d: any) => ({ ...d, _type: 'shipment' }));
+        .map((d: any) => ({ ...d, _type: 'shipment', _isMine: true }));
     const myTrips = trips.map(normTrip)
         .filter((t: any) => isMyDeal(t) && t.status !== 'CANCELLED')
-        .map((t: any) => ({ ...t, _type: 'trip' }));
+        .map((t: any) => ({ ...t, _type: 'trip', _isMine: true }));
     const myPosts = [...myDeals, ...myTrips].sort((a: any, b: any) =>
         new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
     );
@@ -442,7 +442,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     const statusColor: Record<string, string> = {
                         OPEN: '#22c55e', MATCHED: '#3b82f6', PICKED_UP: '#f59e0b',
                         IN_TRANSIT: '#8b5cf6', DELIVERED: '#10b981', COMPLETED: '#10b981',
-                        CANCELLED: '#ef4444', DISPUTED: '#ef4444',
+                        CANCELLED: '#ef4444', DISPUTED: '#64748b',
                     };
                     const statusLabel = deal.status ? deal.status.replace(/_/g, ' ') : 'OPEN';
                     const color = statusColor[deal.status] || '#64748b';

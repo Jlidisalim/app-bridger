@@ -147,11 +147,14 @@ export const TrackingFullScreen: React.FC<Props> = ({ deal, currentUserId, onBac
   const travelerAvatar: string | null = deal?.traveler?.profilePhoto ?? deal?.traveler?.avatar ?? null;
   const travelerName:   string | null = deal?.traveler?.name ?? deal?.travelerName ?? null;
 
-  const handleActivate = async (modeToActivate: 'gps' | 'flight', callsign?: string) => {
+  const handleActivate = async (
+    modeToActivate: 'gps' | 'flight' | 'boat',
+    opts: { callsign?: string; mmsi?: number },
+  ) => {
     if (busy) return;
     setBusy(true);
     try {
-      const res = await trackingApi.activate(dealId, modeToActivate, callsign);
+      const res = await trackingApi.activate(dealId, modeToActivate, opts);
       if (res.success) {
         setShowModeSheet(false);
         if (res.data?.session) {
@@ -196,7 +199,7 @@ export const TrackingFullScreen: React.FC<Props> = ({ deal, currentUserId, onBac
     }
     setBusy(true);
     try {
-      await trackingApi.switchMode(dealId, 'flight', callsign);
+      await trackingApi.switchMode(dealId, 'flight', { callsign });
       dismissSmartSwitch(dealId);
     } catch (e: any) {
       Alert.alert('Could not switch mode', e?.message ?? 'Please try again.');
@@ -369,8 +372,9 @@ export const TrackingFullScreen: React.FC<Props> = ({ deal, currentUserId, onBac
       <TrackingModeSheet
         visible={showModeSheet}
         onClose={() => setShowModeSheet(false)}
-        defaultMode={state.mode === 'flight' ? 'flight' : 'gps'}
+        defaultMode={state.mode === 'flight' ? 'flight' : state.mode === 'boat' ? 'boat' : 'gps'}
         defaultCallsign={state.flight.callsign ?? ''}
+        defaultMmsi={state.boat.mmsi != null ? String(state.boat.mmsi) : ''}
         loading={busy}
         onActivate={handleActivate}
       />

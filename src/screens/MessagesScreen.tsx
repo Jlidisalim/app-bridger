@@ -23,6 +23,7 @@ import {
     Search as ExploreIcon,
     Plus,
     MessageCircle,
+    Users,
 } from 'lucide-react-native';
 import { useAppStore } from '../store/useAppStore';
 import { useSocket } from '../hooks/useSocket';
@@ -35,7 +36,7 @@ interface MessagesScreenProps {
     onCreate: () => void;
     onMessages: () => void;
     onProfile: () => void;
-    onSelectChat: (user: { name: string; verified?: boolean; conversationId?: string; phone?: string; dealId?: string; avatar?: string; userId?: string }) => void;
+    onSelectChat: (user: { name: string; verified?: boolean; conversationId?: string; phone?: string; dealId?: string; avatar?: string; userId?: string; isGroup?: boolean }) => void;
 }
 
 export const MessagesScreen: React.FC<MessagesScreenProps> = ({ onBack, onHome, onExplore, onCreate, onMessages, onProfile, onSelectChat }) => {
@@ -67,19 +68,31 @@ export const MessagesScreen: React.FC<MessagesScreenProps> = ({ onBack, onHome, 
             ? c.participants.find((p: any) => p.id !== currentUser?.id) || c.participants[0]
             : null;
 
+        const isGroup = !!c.isGroup;
+        const groupLabel = isGroup
+            ? (c.groupName || (Array.isArray(c.participants)
+                ? c.participants.map((p: any) => p.name?.split(' ')[0] || p.name).filter(Boolean).join(', ')
+                : 'Group Chat'))
+            : null;
+
         return {
             id: c.id || i,
             conversationId: c.id,
-            dealId: c.dealId,
+            dealId: c.dealId || c.groupDealId,
+            isGroup,
             // Support both backend shape (participants[]) and fake-data shape (user.name)
-            name: c.user?.name || otherParticipant?.name || c.name || 'User',
-            verified: c.user?.verified ?? otherParticipant?.verified ?? true,
+            name: isGroup
+                ? (groupLabel || 'Group Chat')
+                : (c.user?.name || otherParticipant?.name || c.name || 'User'),
+            verified: isGroup ? false : (c.user?.verified ?? otherParticipant?.verified ?? true),
             active: c.user?.active ?? (c.unreadCount || 0) > 0,
-            // Stable user ID — required for avatar cache subscriptions
-            userId: c.user?.id || otherParticipant?.id,
+            // Stable user ID — required for avatar cache subscriptions (null for groups)
+            userId: isGroup ? undefined : (c.user?.id || otherParticipant?.id),
             // Use profilePhoto with fallback to avatar, from the other participant
-            avatar: c.user?.profilePhoto || c.user?.avatar
-                || otherParticipant?.profilePhoto || otherParticipant?.avatar,
+            avatar: isGroup
+                ? undefined
+                : (c.user?.profilePhoto || c.user?.avatar
+                    || otherParticipant?.profilePhoto || otherParticipant?.avatar),
             // Support both backend shape (lastMessage.content) and fake-data shape (string)
             message: typeof c.lastMessage === 'string'
                 ? c.lastMessage
@@ -138,24 +151,32 @@ export const MessagesScreen: React.FC<MessagesScreenProps> = ({ onBack, onHome, 
                         <TouchableOpacity
                             key={chat.id}
                             style={styles.chatItem}
-                            onPress={() => onSelectChat({ name: chat.name, verified: chat.verified, conversationId: chat.conversationId, dealId: chat.dealId, avatar: chat.avatar, userId: chat.userId })}
+                            onPress={() => onSelectChat({ name: chat.name, verified: chat.verified, conversationId: chat.conversationId, dealId: chat.dealId, avatar: chat.avatar, userId: chat.userId, isGroup: chat.isGroup })}
                         >
                             <View style={styles.avatarContainer}>
-                                <Avatar
-                                    userId={chat.userId}
-                                    uri={chat.avatar}
-                                    name={chat.name}
-                                    size={56}
-                                    style={{ borderWidth: 1, borderColor: COLORS.background.slate[100] }}
-                                    accessibilityLabel={`${chat.name}'s avatar`}
-                                />
+                                {chat.isGroup ? (
+                                    <View style={styles.groupAvatar}>
+                                        <Users color={COLORS.primary} size={28} />
+                                    </View>
+                                ) : (
+                                    <Avatar
+                                        userId={chat.userId}
+                                        uri={chat.avatar}
+                                        name={chat.name}
+                                        size={56}
+                                        style={{ borderWidth: 1, borderColor: COLORS.background.slate[100] }}
+                                        accessibilityLabel={`${chat.name}'s avatar`}
+                                    />
+                                )}
                                 {chat.active && <View style={styles.activeDot} />}
-                                {chat.verified && <View style={styles.verifiedBadge}><ShieldCheck color={COLORS.white} size={8} /></View>}
+                                {chat.verified && !chat.isGroup && <View style={styles.verifiedBadge}><ShieldCheck color={COLORS.white} size={8} /></View>}
                             </View>
 
                             <View style={styles.chatContent}>
                                 <View style={styles.chatHeader}>
-                                    <Typography weight="bold" style={styles.flex1}>{chat.name}</Typography>
+                                    <Typography weight="bold" style={styles.flex1} numberOfLines={1}>
+                                        {chat.isGroup ? `Group · ${chat.name}` : chat.name}
+                                    </Typography>
                                     <Typography size="xs" color={COLORS.background.slate[400]}>{chat.time}</Typography>
                                 </View>
                                 <Typography size="sm" color={COLORS.background.slate[500]} numberOfLines={1} style={styles.messageText}>
@@ -254,6 +275,16 @@ const styles = StyleSheet.create({
     },
     avatarContainer: {
         position: 'relative',
+    },
+    groupAvatar: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: `${COLORS.primary}14`,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: COLORS.background.slate[100],
     },
     activeDot: {
         position: 'absolute',

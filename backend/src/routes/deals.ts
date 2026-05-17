@@ -314,6 +314,44 @@ router.post('/pricing-suggestion', authenticate, async (req: any, res, next) => 
   } catch (error) { next(error); }
 });
 
+// GET /deals/as-receiver — Deals where the authenticated user's phone matches receiverPhone.
+// Lets a logged-in user see packages addressed to them without re-entering name/phone.
+router.get('/as-receiver', authenticate, async (req: any, res, next) => {
+  try {
+    const userPhone: string | undefined = req.user?.phone;
+    if (!userPhone) {
+      return res.json({ items: [], total: 0, page: 1, limit: 0, hasMore: false });
+    }
+    const { page = 1, limit = 20 } = req.query;
+    const skip = (Number(page) - 1) * Number(limit);
+    const take = Number(limit);
+
+    const where = { receiverPhone: userPhone };
+
+    const [items, total] = await Promise.all([
+      prisma.deal.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          sender:   { select: { id: true, name: true, avatar: true, profilePhoto: true, rating: true, verified: true, phone: true } },
+          traveler: { select: { id: true, name: true, avatar: true, profilePhoto: true, rating: true, verified: true } },
+          trackingEvents: { orderBy: { createdAt: 'desc' } },
+        },
+      }),
+      prisma.deal.count({ where }),
+    ]);
+
+    const itemsWithImages = items.map((deal: any) => ({
+      ...deal,
+      images: deal.images ? (() => { try { return JSON.parse(deal.images); } catch { return []; } })() : [],
+    }));
+
+    res.json({ items: itemsWithImages, total, page: Number(page), limit: Number(limit), hasMore: skip + take < total });
+  } catch (error) { next(error); }
+});
+
 // GET /deals/:id
 router.get('/:id', authenticate, async (req: any, res, next) => {
   try {
@@ -333,7 +371,18 @@ router.get('/:id', authenticate, async (req: any, res, next) => {
       try { return JSON.parse(deal.images); } catch { return []; }
     })() : [];
 
-    res.json({ ...deal, images });
+    // Does the receiver have a Bridger account? Used to gate the group-chat button.
+    // Boolean only — we never leak the receiver's user id to the deal payload.
+    let receiverHasAccount = false;
+    if (deal.receiverPhone) {
+      const receiver = await prisma.user.findUnique({
+        where: { phone: deal.receiverPhone },
+        select: { id: true },
+      });
+      receiverHasAccount = !!receiver;
+    }
+
+    res.json({ ...deal, images, receiverHasAccount });
   } catch (error) { next(error); }
 });
 
@@ -452,7 +501,10 @@ router.delete('/:id', authenticate, async (req: any, res, next) => {
   } catch (error) { next(error); }
 });
 
-// POST /deals/:id/match — Traveler accepts a deal
+// POST /deals/:id/match — Traveler REQUESTS to carry a deal.
+// This no longer auto-matches: it creates a PENDING DealRequest and notifies
+// the sender, who must accept it via POST /deals/:id/requests/:requestId/accept.
+// Escrow is held only when the sender accepts.
 router.post('/:id/match', authenticate, async (req: any, res, next) => {
   try {
     const deal = await prisma.deal.findUnique({
@@ -461,16 +513,91 @@ router.post('/:id/match', authenticate, async (req: any, res, next) => {
     });
     if (!deal)                          return res.status(404).json({ error: 'Deal not found' });
     if (deal.status !== 'OPEN')         return res.status(400).json({ error: 'Deal is not open' });
-    if (deal.senderId === req.user.id)  return res.status(400).json({ error: 'Cannot match your own deal' });
+    if (deal.senderId === req.user.id)  return res.status(400).json({ error: 'Cannot request your own deal' });
 
-    // Atomically hold the shipment fee from the sender's available balance
-    // and move it into the Blocked/Escrow state. The Traveler does not
-    // need any balance — only the Sender's funds are touched.
+    const proposedPrice = Number(req.body?.price ?? deal.price);
+    if (!(proposedPrice > 0))           return res.status(400).json({ error: 'price must be greater than zero' });
+
+    // Upsert: if the traveler has a prior REJECTED/WITHDRAWN request, allow
+    // them to re-request (we deliberately do not block re-request here per
+    // the agreed flow). If a PENDING/ACCEPTED already exists, reject.
+    const existing = await prisma.dealRequest.findUnique({
+      where: { dealId_requesterId: { dealId: deal.id, requesterId: req.user.id } },
+    });
+    if (existing && (existing.status === 'PENDING' || existing.status === 'ACCEPTED')) {
+      return res.status(409).json({ error: 'You already have an active request on this deal' });
+    }
+
+    const request = existing
+      ? await prisma.dealRequest.update({
+          where: { id: existing.id },
+          data: { status: 'PENDING', proposedPrice, message: req.body?.message ?? null, decidedAt: null },
+        })
+      : await prisma.dealRequest.create({
+          data: {
+            dealId: deal.id,
+            requesterId: req.user.id,
+            proposedPrice,
+            message: req.body?.message ?? null,
+          },
+        });
+
+    // 📦 Push: notify the sender that a traveler is requesting their deal.
+    const traveler = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { name: true },
+    });
+    push(
+      deal.senderId,
+      '🙋 New Request',
+      `${traveler?.name ?? 'A traveler'} wants to carry your package`,
+      { type: 'deal_request_received', dealId: deal.id, requestId: request.id, screen: 'DealRequests' }
+    );
+
+    res.json({ request, dealStatus: deal.status });
+  } catch (error) { next(error); }
+});
+
+// GET /deals/:id/requests — Sender lists requests for their deal.
+router.get('/:id/requests', authenticate, async (req: any, res, next) => {
+  try {
+    const deal = await prisma.deal.findUnique({ where: { id: req.params.id } });
+    if (!deal) return res.status(404).json({ error: 'Deal not found' });
+    if (deal.senderId !== req.user.id) {
+      return res.status(403).json({ error: 'Only the sender can view requests for this deal' });
+    }
+    const requests = await prisma.dealRequest.findMany({
+      where: { dealId: deal.id },
+      include: {
+        requester: { select: { id: true, name: true, avatar: true, profilePhoto: true, rating: true, verified: true, totalDeals: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json({ items: requests });
+  } catch (error) { next(error); }
+});
+
+// POST /deals/:id/requests/:requestId/accept — Sender accepts one request.
+// This is the atomic match step: holds escrow, marks the deal MATCHED,
+// auto-rejects all sibling PENDING requests, and opens the chat room.
+router.post('/:id/requests/:requestId/accept', authenticate, async (req: any, res, next) => {
+  try {
+    const { id: dealId, requestId } = req.params;
+    const deal = await prisma.deal.findUnique({ where: { id: dealId } });
+    if (!deal) return res.status(404).json({ error: 'Deal not found' });
+    if (deal.senderId !== req.user.id) return res.status(403).json({ error: 'Only the sender can accept requests' });
+    if (deal.status !== 'OPEN') return res.status(400).json({ error: 'Deal is not open' });
+
+    const request = await prisma.dealRequest.findUnique({ where: { id: requestId } });
+    if (!request || request.dealId !== dealId) return res.status(404).json({ error: 'Request not found' });
+    if (request.status !== 'PENDING') return res.status(400).json({ error: `Request is ${request.status.toLowerCase()}` });
+
+    // Hold escrow at the request's proposed price (so counter-offers stick).
     try {
       await holdEscrow({
         senderId: deal.senderId,
         dealId: deal.id,
-        amount: Number(deal.price),
+        amount: Number(request.proposedPrice),
         currency: deal.currency || 'USD',
       });
     } catch (e: any) {
@@ -478,20 +605,42 @@ router.post('/:id/match', authenticate, async (req: any, res, next) => {
       return res.status(status).json({ error: e?.message || 'Failed to hold escrow' });
     }
 
-    const updatedDeal = await prisma.deal.update({
-      where: { id: req.params.id, status: 'OPEN' },
-      data: { travelerId: req.user.id, status: 'MATCHED' },
-    }).catch(() => null);
+    // Atomic flip: mark deal MATCHED at proposed price, mark this request
+    // ACCEPTED, and reject all sibling PENDING requests. Done as a
+    // conditional update on status='OPEN' to defend against races.
+    const result = await prisma.$transaction(async (tx) => {
+      const updated = await tx.deal.updateMany({
+        where: { id: deal.id, status: 'OPEN' },
+        data: { travelerId: request.requesterId, status: 'MATCHED', price: request.proposedPrice },
+      });
+      if (updated.count === 0) return null;
 
-    if (!updatedDeal) {
-      // The deal was taken or moved out of OPEN by another request between
-      // the escrow hold and this update — undo the hold to keep the
-      // sender's wallet consistent.
+      await tx.dealRequest.update({
+        where: { id: request.id },
+        data: { status: 'ACCEPTED', decidedAt: new Date() },
+      });
+      const siblings = await tx.dealRequest.findMany({
+        where: { dealId: deal.id, status: 'PENDING', NOT: { id: request.id } },
+        select: { id: true, requesterId: true },
+      });
+      if (siblings.length > 0) {
+        await tx.dealRequest.updateMany({
+          where: { id: { in: siblings.map((s) => s.id) } },
+          data: { status: 'REJECTED', decidedAt: new Date() },
+        });
+      }
+      const fresh = await tx.deal.findUnique({ where: { id: deal.id } });
+      return { deal: fresh, rejectedSiblings: siblings };
+    });
+
+    if (!result) {
+      // Deal moved out of OPEN between our check and the transaction —
+      // refund the just-held escrow so the sender wallet stays balanced.
       await refundEscrowToSender(deal.id, 'Deal no longer available — race condition').catch(() => {});
       return res.status(409).json({ error: 'Deal is no longer available' });
     }
 
-    // Create chat room or add traveler to existing one
+    // Open / extend the chat room linking sender and chosen traveler.
     const existingRoom = await prisma.chatRoom.findUnique({
       where: { dealId: deal.id },
       include: { participants: true },
@@ -500,15 +649,12 @@ router.post('/:id/match', authenticate, async (req: any, res, next) => {
       await prisma.chatRoom.create({
         data: {
           dealId: deal.id,
-          participants: {
-            createMany: { data: [{ userId: deal.senderId }, { userId: req.user.id }] },
-          },
+          participants: { createMany: { data: [{ userId: deal.senderId }, { userId: request.requesterId }] } },
         },
       });
     } else {
-      // Ensure both sender and new traveler are participants
       const existingIds = existingRoom.participants.map((p: any) => p.userId);
-      const toAdd = [deal.senderId, req.user.id].filter((id) => !existingIds.includes(id));
+      const toAdd = [deal.senderId, request.requesterId].filter((id) => !existingIds.includes(id));
       if (toAdd.length > 0) {
         await prisma.chatParticipant.createMany({
           data: toAdd.map((userId) => ({ chatRoomId: existingRoom.id, userId })),
@@ -517,19 +663,90 @@ router.post('/:id/match', authenticate, async (req: any, res, next) => {
       }
     }
 
-    // 📦 Push: notify sender that a traveler accepted
-    const traveler = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: { name: true },
+    // Push: notify the accepted traveler.
+    push(request.requesterId, '✅ Request Accepted', 'The sender accepted your request.', {
+      type: 'deal_request_accepted', dealId: deal.id, requestId: request.id, screen: 'DealDetails',
     });
-    push(
-      deal.senderId,
-      '✅ Traveler Found',
-      `${traveler?.name ?? 'A traveler'} will carry your package`,
-      { type: 'deal_matched', dealId: deal.id, screen: 'DealDetails' }
-    );
+    // Push: notify all the auto-rejected travelers.
+    if (result.rejectedSiblings.length > 0) {
+      pushMany(
+        result.rejectedSiblings.map((s) => s.requesterId),
+        '😞 Request Declined',
+        'The sender chose another traveler for this deal.',
+        { type: 'deal_request_rejected', dealId: deal.id, screen: 'Explore' }
+      );
+    }
 
-    res.json(updatedDeal);
+    res.json({ success: true, deal: result.deal });
+  } catch (error) { next(error); }
+});
+
+// POST /deals/:id/requests/:requestId/reject — Sender rejects a single request.
+// The deal stays OPEN so other travelers can still request it.
+router.post('/:id/requests/:requestId/reject', authenticate, async (req: any, res, next) => {
+  try {
+    const { id: dealId, requestId } = req.params;
+    const deal = await prisma.deal.findUnique({ where: { id: dealId } });
+    if (!deal) return res.status(404).json({ error: 'Deal not found' });
+    if (deal.senderId !== req.user.id) return res.status(403).json({ error: 'Only the sender can reject requests' });
+
+    const request = await prisma.dealRequest.findUnique({ where: { id: requestId } });
+    if (!request || request.dealId !== dealId) return res.status(404).json({ error: 'Request not found' });
+    if (request.status !== 'PENDING') return res.status(400).json({ error: `Request is ${request.status.toLowerCase()}` });
+
+    const updated = await prisma.dealRequest.update({
+      where: { id: request.id },
+      data: { status: 'REJECTED', decidedAt: new Date() },
+    });
+
+    push(request.requesterId, '😞 Request Declined', 'The sender declined your request.', {
+      type: 'deal_request_rejected', dealId: deal.id, requestId: request.id, screen: 'Explore',
+    });
+
+    res.json({ success: true, request: updated });
+  } catch (error) { next(error); }
+});
+
+// POST /deals/:id/requests/:requestId/withdraw — Requesting traveler cancels their pending request.
+router.post('/:id/requests/:requestId/withdraw', authenticate, async (req: any, res, next) => {
+  try {
+    const { id: dealId, requestId } = req.params;
+    const request = await prisma.dealRequest.findUnique({ where: { id: requestId } });
+    if (!request || request.dealId !== dealId) return res.status(404).json({ error: 'Request not found' });
+    if (request.requesterId !== req.user.id) return res.status(403).json({ error: 'You can only withdraw your own request' });
+    if (request.status !== 'PENDING') return res.status(400).json({ error: `Request is ${request.status.toLowerCase()}` });
+
+    const updated = await prisma.dealRequest.update({
+      where: { id: request.id },
+      data: { status: 'WITHDRAWN', decidedAt: new Date() },
+    });
+
+    const deal = await prisma.deal.findUnique({ where: { id: dealId }, select: { senderId: true } });
+    if (deal) {
+      push(deal.senderId, 'Request withdrawn', 'A traveler withdrew their request on your deal.', {
+        type: 'deal_request_withdrawn', dealId, requestId, screen: 'DealRequests',
+      });
+    }
+
+    res.json({ success: true, request: updated });
+  } catch (error) { next(error); }
+});
+
+// GET /deals/my-requests — List requests the current user has sent.
+router.get('/my-requests/sent', authenticate, async (req: any, res, next) => {
+  try {
+    const requests = await prisma.dealRequest.findMany({
+      where: { requesterId: req.user.id },
+      include: {
+        deal: {
+          include: {
+            sender: { select: { id: true, name: true, avatar: true, profilePhoto: true, verified: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json({ items: requests });
   } catch (error) { next(error); }
 });
 

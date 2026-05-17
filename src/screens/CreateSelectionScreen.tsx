@@ -10,7 +10,7 @@ import { COLORS, SPACING, RADIUS } from '../theme/theme';
 import { Typography } from '../components/Typography';
 import {
     Package,
-    Plane,
+    Compass,
     ChevronLeft,
     ArrowRight,
     Briefcase,
@@ -70,7 +70,7 @@ export const CreateSelectionScreen: React.FC<CreateSelectionScreenProps> = ({
 
                     <TouchableOpacity style={styles.optionCard} onPress={onSelectTraveler}>
                         <View style={[styles.iconContainer, { backgroundColor: '#f0fdf4' }]}>
-                            <Plane color="#16a34a" size={32} />
+                            <Compass color="#16a34a" size={32} />
                         </View>
                         <View style={styles.optionInfo}>
                             <Typography size="xl" weight="bold" style={styles.optionTitle}>Post a Trip</Typography>

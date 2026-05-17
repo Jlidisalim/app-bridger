@@ -78,7 +78,7 @@ jobs:
               PORT=8000 \
               PYTHONUNBUFFERED=1 \
               WEBSITES_CONTAINER_START_TIME_LIMIT=1800 \
-              INTERNAL_API_SECRET=2bb61ae001efa97735128dbdc1a4df61a52cae58d2aa535d3ff760ad075e87b4
+              INTERNAL_API_SECRET=${{ secrets.INTERNAL_API_SECRET }}
       
       - name: Restart Web App
         run: |

@@ -26,18 +26,23 @@ import { openskyTokens } from '../services/opensky/opensky.token';
 
 const router = Router();
 
+// MMSI is a 9-digit identifier; we accept it as number (most flexible for clients).
+const mmsiSchema = z.number().int().positive().max(999_999_999);
+
 const activateSchema = z.object({
   dealId:   z.string().min(1),
-  mode:     z.enum(['gps', 'flight']),
+  mode:     z.enum(['gps', 'flight', 'boat']),
   callsign: z.string().min(2).max(10).optional(),
+  mmsi:     mmsiSchema.optional(),
 });
 
 const dealIdSchema = z.object({ dealId: z.string().min(1) });
 
 const switchSchema = z.object({
   dealId:   z.string().min(1),
-  newMode:  z.enum(['gps', 'flight']),
+  newMode:  z.enum(['gps', 'flight', 'boat']),
   callsign: z.string().min(2).max(10).optional(),
+  mmsi:     mmsiSchema.optional(),
 });
 
 const gpsSchema = z.object({
@@ -85,7 +90,10 @@ router.post('/deactivate', async (req: AuthRequest, res, next) => {
 router.post('/switch-mode', async (req: AuthRequest, res, next) => {
   try {
     const input = switchSchema.parse(req.body);
-    await switchMode(userId(req), input.dealId, input.newMode, input.callsign);
+    await switchMode(userId(req), input.dealId, input.newMode, {
+      callsign: input.callsign,
+      mmsi:     input.mmsi,
+    });
     res.json({ ok: true });
   } catch (err) { handleError(err, res, next); }
 });

@@ -62,7 +62,7 @@ const HomeTabWrapper = () => {
       onViewDeal={(deal) => navigation.navigate('DealDetails', {
         dealId: deal.id,
         type: deal._type === 'trip' ? 'trip' : 'deal',
-        isOwner: !!deal._type, // _type is only set on myPosts items
+        isOwner: !!deal._isMine,
       })}
       onAcceptDeal={(deal) => navigation.navigate('Tracking', { dealId: deal.id })}
       onNotifications={() => navigation.navigate('Notifications')}
@@ -102,7 +102,7 @@ const CreateTabWrapper = () => {
       }}
       onSelectTraveler={() => {
         setMode('traveler');
-        navigation.navigate('TravelerRoute');
+        navigation.navigate('FlightDetails');
       }}
     />
   );
@@ -139,6 +139,7 @@ const ProfileTabWrapper = () => {
       onEditProfile={() => navigation.navigate('EditProfile')}
       onHelp={() => navigation.navigate('HelpSupport')}
       onNotifications={() => navigation.navigate('Notifications')}
+      onReceivedPackages={() => navigation.navigate('ReceivedPackages')}
     />
   );
 };

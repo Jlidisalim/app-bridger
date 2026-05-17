@@ -31,6 +31,7 @@ import {
     User,
     CheckCircle2,
     Trash2,
+    Users,
 } from 'lucide-react-native';
 import { useUserCurrency } from '../utils/currency';
 import { useNavigation } from '@react-navigation/native';
@@ -74,9 +75,12 @@ interface DealDetailsScreenProps {
     isAccepting?: boolean;
     isDeleting?: boolean;
     entityType?: 'deal' | 'trip';
+    /** True when the receiver has a Bridger account AND current user is sender or traveler. */
+    canGroupChat?: boolean;
     onBack: () => void;
     onAccept: (price: number) => void;
     onChat: (user: { name: string; verified?: boolean; avatar?: string; profilePhoto?: string }) => void;
+    onGroupChat?: () => void;
     onDelete?: () => Promise<void> | void;
 }
 
@@ -85,9 +89,11 @@ export const DealDetailsScreen: React.FC<DealDetailsScreenProps> = ({
     isOwner = false,
     isDeleting = false,
     entityType = 'deal',
+    canGroupChat = false,
     onBack,
     onAccept,
     onChat,
+    onGroupChat,
     onDelete,
 }) => {
     const currency = useUserCurrency();
@@ -286,6 +292,14 @@ export const DealDetailsScreen: React.FC<DealDetailsScreenProps> = ({
                              {showSummary ? 'Show Details' : 'Deal Summary'}
                          </Typography>
                      </TouchableOpacity>
+                     {canGroupChat && (
+                         <TouchableOpacity style={styles.actionButton} onPress={() => onGroupChat?.()}>
+                             <Users size={20} color={COLORS.primary} />
+                             <Typography size="sm" weight="bold" style={styles.actionButtonText}>
+                                 Group Chat
+                             </Typography>
+                         </TouchableOpacity>
+                     )}
                      <TouchableOpacity style={styles.actionButton} onPress={() => navigation.navigate('ReceiverCode', { dealId: deal.id })}>
                          <User size={20} color={COLORS.primary} />
                          <Typography size="sm" weight="bold" style={styles.actionButtonText}>
@@ -420,17 +434,35 @@ export const DealDetailsScreen: React.FC<DealDetailsScreenProps> = ({
                     <Typography size="xs" color={COLORS.background.slate[400]}>Total Fee {deal.negotiable ? '(Negotiable)' : '(Fixed)'}</Typography>
                 </View>
                 {isOwner ? (
-                    <View style={styles.statusBadgeLarge}>
-                        <View style={[styles.statusDot, { backgroundColor: deal.status === 'OPEN' ? '#22c55e' : deal.status === 'CANCELLED' ? '#ef4444' : '#3b82f6' }]} />
-                        <Typography size="md" weight="bold" color={COLORS.background.slate[700]}>
-                            {(deal.status || 'OPEN').replace(/_/g, ' ')}
-                        </Typography>
-                    </View>
+                    (deal.status || 'OPEN') === 'OPEN' ? (
+                        <TouchableOpacity
+                            style={styles.acceptBtn}
+                            onPress={() => navigation.navigate(
+                                entityType === 'trip' ? 'TripRequests' : 'DealRequests',
+                                entityType === 'trip' ? { tripId: deal.id } : { dealId: deal.id },
+                            )}
+                        >
+                            <Typography size="lg" weight="bold" color={COLORS.white}>
+                                View Requests
+                            </Typography>
+                        </TouchableOpacity>
+                    ) : (
+                        <View style={styles.statusBadgeLarge}>
+                            <View style={[styles.statusDot, { backgroundColor: deal.status === 'CANCELLED' ? '#ef4444' : '#3b82f6' }]} />
+                            <Typography size="md" weight="bold" color={COLORS.background.slate[700]}>
+                                {(deal.status || 'OPEN').replace(/_/g, ' ')}
+                            </Typography>
+                        </View>
+                    )
                 ) : (
-                    <TouchableOpacity style={styles.acceptBtn} onPress={handleAccept}>
-                        <Typography size="lg" weight="bold" color={COLORS.white}>
-                            {deal.negotiable ? 'Give a Price' : 'Accept Quest'}
-                        </Typography>
+                    <TouchableOpacity style={styles.acceptBtn} onPress={handleAccept} disabled={isSubmitting}>
+                        {isSubmitting ? (
+                            <ActivityIndicator color={COLORS.white} />
+                        ) : (
+                            <Typography size="lg" weight="bold" color={COLORS.white}>
+                                {deal.negotiable ? 'Make an Offer' : 'Send Request'}
+                            </Typography>
+                        )}
                     </TouchableOpacity>
                 )}
             </View>
@@ -469,12 +501,18 @@ export const DealDetailsScreen: React.FC<DealDetailsScreenProps> = ({
                             />
                         </View>
 
-                        <TouchableOpacity style={styles.submitBtn} onPress={submitOffer}>
-                            <Typography size="lg" weight="bold" color={COLORS.white}>Send Offer</Typography>
+                        <TouchableOpacity style={styles.submitBtn} onPress={submitOffer} disabled={isSubmitting}>
+                            {isSubmitting ? (
+                                <ActivityIndicator color={COLORS.white} />
+                            ) : (
+                                <Typography size="lg" weight="bold" color={COLORS.white}>Send Request</Typography>
+                            )}
                         </TouchableOpacity>
 
                         <Typography size="xs" color={COLORS.background.slate[400]} style={styles.modalFooterText}>
-                            The traveler will receive your offer and can choose to accept or decline.
+                            {entityType === 'trip'
+                                ? 'The traveler will be notified and can accept or decline your request.'
+                                : 'The sender will be notified and can accept or decline your request.'}
                         </Typography>
                     </View>
                 </KeyboardAvoidingView>

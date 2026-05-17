@@ -5,7 +5,7 @@ import { useEffect } from 'react';
 import { useSocket } from './useSocket';
 import { useTrackingStore } from '../store/tracking.store';
 import { TRACKING_EVENTS } from '../constants/tracking';
-import type { FlightPosition, GPSPosition, LatLng } from '../types/tracking';
+import type { FlightPosition, GPSPosition, LatLng, VesselPosition } from '../types/tracking';
 
 interface ServerGpsPayload {
   dealId: string;
@@ -22,6 +22,11 @@ interface ServerFlightPayload {
   routePath?: { lat: number; lng: number }[];
 }
 
+interface ServerVesselPayload {
+  dealId: string;
+  position: VesselPosition;
+}
+
 export function useTrackingSocket(dealId: string | null | undefined): {
   isConnected: boolean;
 } {
@@ -30,6 +35,7 @@ export function useTrackingSocket(dealId: string | null | undefined): {
   const pushGPS = useTrackingStore((s) => s.pushGPSPosition);
   const pushFlight = useTrackingStore((s) => s.pushFlightPosition);
   const setRoute = useTrackingStore((s) => s.setFlightRoute);
+  const pushBoat = useTrackingStore((s) => s.pushBoatPosition);
   const markGPSLost = useTrackingStore((s) => s.markGPSLost);
   const clearGPSLost = useTrackingStore((s) => s.clearGPSLost);
   const promptSmartSwitch = useTrackingStore((s) => s.promptSmartSwitch);
@@ -101,6 +107,16 @@ export function useTrackingSocket(dealId: string | null | undefined): {
       console.warn(`[tracking] Flight not found: ${payload.callsign}`);
     };
 
+    const onVesselUpdate = (payload: ServerVesselPayload) => {
+      if (payload.dealId !== dealId) return;
+      pushBoat(dealId, payload.position);
+    };
+
+    const onVesselNotFound = (payload: { dealId: string; mmsi: number }) => {
+      if (payload.dealId !== dealId) return;
+      console.warn(`[tracking] Vessel not found: MMSI ${payload.mmsi}`);
+    };
+
     socket.on(TRACKING_EVENTS.PONG, onPong);
     socket.on(TRACKING_EVENTS.GPS_UPDATE, onGpsUpdate);
     socket.on(TRACKING_EVENTS.GPS_LOST, onGpsLost);
@@ -108,6 +124,8 @@ export function useTrackingSocket(dealId: string | null | undefined): {
     socket.on(TRACKING_EVENTS.SUGGEST_FLIGHT, onSuggestFlight);
     socket.on(TRACKING_EVENTS.FLIGHT_UPDATE, onFlightUpdate);
     socket.on(TRACKING_EVENTS.FLIGHT_NOT_FOUND, onFlightNotFound);
+    socket.on(TRACKING_EVENTS.VESSEL_UPDATE, onVesselUpdate);
+    socket.on(TRACKING_EVENTS.VESSEL_NOT_FOUND, onVesselNotFound);
 
     return () => {
       socket.off(TRACKING_EVENTS.PONG, onPong);
@@ -117,9 +135,11 @@ export function useTrackingSocket(dealId: string | null | undefined): {
       socket.off(TRACKING_EVENTS.SUGGEST_FLIGHT, onSuggestFlight);
       socket.off(TRACKING_EVENTS.FLIGHT_UPDATE, onFlightUpdate);
       socket.off(TRACKING_EVENTS.FLIGHT_NOT_FOUND, onFlightNotFound);
+      socket.off(TRACKING_EVENTS.VESSEL_UPDATE, onVesselUpdate);
+      socket.off(TRACKING_EVENTS.VESSEL_NOT_FOUND, onVesselNotFound);
       socket.emit(TRACKING_EVENTS.LEAVE_DEAL, { dealId });
     };
-  }, [socket, dealId, pushGPS, pushFlight, setRoute, markGPSLost, clearGPSLost, promptSmartSwitch, hydrateFromSession]);
+  }, [socket, dealId, pushGPS, pushFlight, setRoute, pushBoat, markGPSLost, clearGPSLost, promptSmartSwitch, hydrateFromSession]);
 
   return { isConnected };
 }

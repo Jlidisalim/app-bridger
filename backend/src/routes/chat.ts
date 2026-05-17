@@ -122,10 +122,18 @@ router.get('/rooms', authenticate, async (req: any, res, next) => {
       // Get the other participant for conversation image
       const otherParticipant = otherParticipants[0];
 
+      const isGroup = (p.chatRoom as any).isGroup === true;
+      const groupName = isGroup
+        ? otherParticipants.map(o => o.name?.split(' ')[0] || o.name).filter(Boolean).join(', ')
+        : null;
+
       return {
         id: p.chatRoom.id,
         deal: p.chatRoom.deal,
         trip: p.chatRoom.trip,
+        isGroup,
+        groupDealId: (p.chatRoom as any).groupDealId || null,
+        groupName,
         participants: otherParticipants.map(op => ({
           id: op.id,
           name: op.name,
@@ -308,6 +316,74 @@ router.post('/rooms/:id/messages', authenticate, validate(sendMessageSchema), as
   }
 });
 
+// POST /chat/rooms/group - Get or create a 3-party group chat for a deal.
+// Members: deal sender + deal traveler + the receiver user (looked up by receiverPhone).
+// The button is gated to sender or traveler only; receiver doesn't see it but does
+// join the room as a participant.
+router.post('/rooms/group', authenticate, async (req: any, res, next) => {
+  try {
+    const { dealId } = req.body;
+    if (!dealId) {
+      return res.status(400).json({ error: 'dealId is required' });
+    }
+
+    const deal = await prisma.deal.findUnique({ where: { id: dealId } });
+    if (!deal) return res.status(404).json({ error: 'Deal not found' });
+    if (!deal.travelerId) {
+      return res.status(400).json({ error: 'Deal has no traveler yet' });
+    }
+    if (!deal.receiverPhone) {
+      return res.status(400).json({ error: 'Deal has no receiver phone on file' });
+    }
+
+    // Only sender or traveler can open the group chat
+    if (req.user.id !== deal.senderId && req.user.id !== deal.travelerId) {
+      return res.status(403).json({ error: 'Only the sender or traveler can open this group chat' });
+    }
+
+    // Receiver must have an account (looked up by phone)
+    const receiverUser = await prisma.user.findUnique({ where: { phone: deal.receiverPhone } });
+    if (!receiverUser) {
+      return res.status(404).json({ error: 'Receiver does not have a Bridger account', code: 'RECEIVER_NO_ACCOUNT' });
+    }
+
+    const memberIds = Array.from(new Set([deal.senderId, deal.travelerId, receiverUser.id]));
+
+    const roomInclude = {
+      participants: {
+        include: {
+          user: { select: { id: true, name: true, avatar: true, profilePhoto: true } },
+        },
+      },
+      deal: { select: { id: true, title: true, fromCity: true, toCity: true } },
+    };
+
+    // Find an existing group room for this deal with all 3 members
+    const existing = await prisma.chatRoom.findFirst({
+      where: {
+        isGroup: true,
+        groupDealId: dealId,
+        AND: memberIds.map((uid) => ({ participants: { some: { userId: uid } } })),
+      },
+      orderBy: { createdAt: 'desc' },
+      include: roomInclude,
+    });
+    if (existing) return res.json(existing);
+
+    const room = await prisma.chatRoom.create({
+      data: {
+        isGroup: true,
+        groupDealId: dealId,
+        participants: { create: memberIds.map((uid) => ({ userId: uid })) },
+      },
+      include: roomInclude,
+    });
+    return res.status(201).json(room);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // POST /chat/rooms - Get or create a unified chat thread for a user pair.
 // Instead of creating one room per deal/trip, we find the most-recent room that
 // already has BOTH users as participants.  This consolidates all conversations
@@ -337,6 +413,7 @@ router.post('/rooms', authenticate, async (req: any, res, next) => {
     async function findUserPairRoom(userIdA: string, userIdB: string) {
       return prisma.chatRoom.findFirst({
         where: {
+          isGroup: false,
           AND: [
             { participants: { some: { userId: userIdA } } },
             { participants: { some: { userId: userIdB } } },

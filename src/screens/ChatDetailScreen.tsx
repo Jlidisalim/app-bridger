@@ -31,7 +31,8 @@ import {
     AlertCircle,
     Info,
     Wallet,
-    Ban
+    Ban,
+    Users
 } from 'lucide-react-native';
 import { chatAPI, userModerationAPI } from '../services/api';
 import { useAppStore } from '../store/useAppStore';
@@ -115,6 +116,9 @@ interface Message {
     id: string | number;
     text?: string;
     sender: 'me' | 'other';
+    senderId?: string;
+    senderName?: string;
+    senderAvatar?: string;
     time: string;
     type?: 'text' | 'map' | 'image';
     location?: string;
@@ -138,6 +142,7 @@ interface ChatDetailScreenProps {
         phone?: string;
         dealId?: string;
         tripId?: string;
+        isGroup?: boolean;
     };
     onBack: () => void;
 }
@@ -183,6 +188,9 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({ user, onBack
             id: m.id || idx,
             text: m.content || m.text,
             sender: m.senderId === currentUser?.id ? 'me' : 'other',
+            senderId: m.senderId || m.sender?.id,
+            senderName: m.sender?.name,
+            senderAvatar: m.sender?.profilePhoto || m.sender?.avatar,
             time: new Date(m.createdAt || m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             type: localType,
             imageUrl: m.imageUrl,
@@ -674,21 +682,30 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({ user, onBack
 
     const renderMessage = (msg: Message) => {
         const isMe = msg.sender === 'me';
+        // In group chats, use per-message sender; in 1-1 chats fall back to the other user prop.
+        const otherUserId = user.isGroup ? msg.senderId : user.userId;
+        const otherAvatar = user.isGroup ? msg.senderAvatar : (user.avatar || user.profilePhoto);
+        const otherName = user.isGroup ? (msg.senderName || 'Member') : user.name;
 
         return (
             <View key={msg.id} style={[styles.messageRow, isMe ? styles.myMessageRow : styles.otherMessageRow]}>
                 {!isMe && (
                     <Avatar
-                        userId={user.userId}
-                        uri={user.avatar || user.profilePhoto}
-                        name={user.name}
+                        userId={otherUserId}
+                        uri={otherAvatar}
+                        name={otherName}
                         size={32}
                         style={styles.inlineAvatar}
-                        accessibilityLabel={`${user.name}'s avatar`}
+                        accessibilityLabel={`${otherName}'s avatar`}
                     />
                 )}
 
                 <View style={[styles.messageContent, isMe ? styles.myMessageContent : styles.otherMessageContent]}>
+                    {!isMe && user.isGroup && (
+                        <Typography size="xs" weight="bold" color={COLORS.primary} style={{ marginBottom: 2 }}>
+                            {otherName}
+                        </Typography>
+                    )}
                     {msg.type === 'map' ? (
                         <TouchableOpacity
                             activeOpacity={0.85}
@@ -773,18 +790,24 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({ user, onBack
                 </TouchableOpacity>
 
                 <View style={styles.headerUserInfo}>
-                    <Avatar
-                        userId={user.userId}
-                        uri={user.avatar || user.profilePhoto}
-                        name={user.name}
-                        size={44}
-                        style={styles.headerAvatar}
-                        accessibilityLabel={`${user.name}'s profile picture`}
-                    />
+                    {user.isGroup ? (
+                        <View style={[styles.headerAvatar, styles.headerGroupAvatar]}>
+                            <Users color={COLORS.primary} size={22} />
+                        </View>
+                    ) : (
+                        <Avatar
+                            userId={user.userId}
+                            uri={user.avatar || user.profilePhoto}
+                            name={user.name}
+                            size={44}
+                            style={styles.headerAvatar}
+                            accessibilityLabel={`${user.name}'s profile picture`}
+                        />
+                    )}
                     <View>
                         <View style={styles.nameRow}>
                             <Typography weight="bold" size="md">{user.name}</Typography>
-                            {user.verified && (
+                            {user.verified && !user.isGroup && (
                                 <ShieldCheck color={COLORS.primary} size={16} fill={COLORS.primary} style={{ marginLeft: 4 }} />
                             )}
                         </View>
@@ -797,6 +820,32 @@ export const ChatDetailScreen: React.FC<ChatDetailScreenProps> = ({ user, onBack
                         style={styles.headerIconButton}
                         accessibilityLabel="More options"
                         onPress={() => {
+                            // Group chats don't have a single "other user" — only show Clear Chat.
+                            if (user.isGroup) {
+                                if (Platform.OS === 'ios') {
+                                    ActionSheetIOS.showActionSheetWithOptions(
+                                        { options: ['Cancel', 'Clear Chat'], cancelButtonIndex: 0 },
+                                        (idx) => {
+                                            if (idx === 1) {
+                                                setMessages([]);
+                                                if (roomId) saveMessages(roomId, []);
+                                            }
+                                        },
+                                    );
+                                } else {
+                                    Alert.alert('Options', 'Choose an action', [
+                                        { text: 'Cancel', style: 'cancel' },
+                                        {
+                                            text: 'Clear Chat',
+                                            onPress: () => {
+                                                setMessages([]);
+                                                if (roomId) saveMessages(roomId, []);
+                                            },
+                                        },
+                                    ]);
+                                }
+                                return;
+                            }
                             const blockLabel = blockedByMe ? 'Unblock User' : 'Block User';
                             if (Platform.OS === 'ios') {
                                 ActionSheetIOS.showActionSheetWithOptions(
@@ -1078,6 +1127,11 @@ const styles = StyleSheet.create({
         width: 44,
         height: 44,
         borderRadius: 22,
+    },
+    headerGroupAvatar: {
+        backgroundColor: `${COLORS.primary}14`,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     nameRow: {
         flexDirection: 'row',

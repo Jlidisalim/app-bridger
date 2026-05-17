@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, SPACING, RADIUS } from '../theme/theme';
 import { Typography } from '../components/Typography';
 import { Button } from '../components/Button';
-import { ArrowLeft, ArrowRight, PlaneTakeoff, PlaneLanding, ArrowDownUp, Globe2, X, Link, MapPin } from 'lucide-react-native';
+import { ArrowLeft, ArrowRight, PlaneTakeoff, PlaneLanding, ArrowDownUp, Globe2, X, Link, MapPin, Anchor, Ship, Car, Navigation } from 'lucide-react-native';
 import { TextInput } from 'react-native';
 import { useAppStore } from '../store/useAppStore';
 import { searchAirports, Airport } from '../utils/airports';
@@ -23,19 +23,79 @@ interface TravelerRouteScreenProps {
     onBack: () => void;
 }
 
+type Suggestion =
+    | { kind: 'airport'; airport: Airport }
+    | { kind: 'place'; city: string; country: string };
+
 export const TravelerRouteScreen: React.FC<TravelerRouteScreenProps> = ({ onNext, onBack }) => {
     const travelerRoute = useAppStore((s) => s.travelerRoute);
+    const transportType = useAppStore((s) => s.travelerTransportType);
     const [from, setFrom] = useState(travelerRoute?.from || '');
     const [to, setTo] = useState(travelerRoute?.to || '');
     const [activeField, setActiveField] = useState<'from' | 'to' | null>(null);
 
-    const fromSuggestions = activeField === 'from' ? searchAirports(from) : [];
-    const toSuggestions = activeField === 'to' ? searchAirports(to) : [];
+    // Per-transport copy. BOAT/ROAD use place suggestions (city, country); PLANE keeps airports.
+    const transportCopy = transportType === 'BOAT'
+        ? {
+            title: 'Where are you sailing?',
+            subtitle: 'Enter your departure and arrival ports to find delivery requests on your route.',
+            fromLabel: 'Departure Port',
+            toLabel: 'Arrival Port',
+            placeholder: 'Port, city or country',
+            DepIcon: Anchor,
+            ArrIcon: Ship,
+        }
+        : transportType === 'ROAD'
+        ? {
+            title: 'Where are you driving?',
+            subtitle: 'Enter your departure and arrival cities to find delivery requests on your route.',
+            fromLabel: 'Departure City',
+            toLabel: 'Arrival City',
+            placeholder: 'City or country',
+            DepIcon: Navigation,
+            ArrIcon: Car,
+        }
+        : {
+            title: 'Where are you flying?',
+            subtitle: 'Enter your departure and arrival airports to find delivery requests on your route.',
+            fromLabel: 'Departure Airport',
+            toLabel: 'Arrival Airport',
+            placeholder: 'Airport, city or country',
+            DepIcon: PlaneTakeoff,
+            ArrIcon: PlaneLanding,
+        };
 
-    const formatAirport = (a: Airport) => `${a.code} — ${a.city}, ${a.country}`;
+    const getSuggestions = (q: string): Suggestion[] => {
+        const airports = searchAirports(q);
+        if (transportType === 'PLANE') {
+            return airports.map((a) => ({ kind: 'airport' as const, airport: a }));
+        }
+        // For BOAT/ROAD: dedupe airport results down to city+country places.
+        const seen = new Set<string>();
+        const places: Suggestion[] = [];
+        for (const a of airports) {
+            const key = `${a.city}|${a.country}`.toLowerCase();
+            if (seen.has(key)) continue;
+            seen.add(key);
+            places.push({ kind: 'place', city: a.city, country: a.country });
+            if (places.length >= 8) break;
+        }
+        return places;
+    };
 
-    const handleSelectAirport = (a: Airport, field: 'from' | 'to') => {
-        const value = formatAirport(a);
+    const fromSuggestions = activeField === 'from' ? getSuggestions(from) : [];
+    const toSuggestions = activeField === 'to' ? getSuggestions(to) : [];
+
+    const DepIcon = transportCopy.DepIcon;
+    const ArrIcon = transportCopy.ArrIcon;
+
+    const formatSuggestion = (s: Suggestion) =>
+        s.kind === 'airport'
+            ? `${s.airport.code} — ${s.airport.city}, ${s.airport.country}`
+            : `${s.city}, ${s.country}`;
+
+    const handleSelectSuggestion = (s: Suggestion, field: 'from' | 'to') => {
+        const value = formatSuggestion(s);
         if (field === 'from') setFrom(value);
         else setTo(value);
         setActiveField(null);
@@ -88,23 +148,23 @@ export const TravelerRouteScreen: React.FC<TravelerRouteScreenProps> = ({ onNext
                             TRAVELER FLOW
                         </Typography>
                         <View style={styles.stepHeaderRow}>
-                            <Typography weight="bold" size="md">Step 1: Route Selection</Typography>
-                            <Typography size="sm" color={COLORS.background.slate[500]}>1 of 5</Typography>
+                            <Typography weight="bold" size="md">Step 2: Route Selection</Typography>
+                            <Typography size="sm" color={COLORS.background.slate[500]}>2 of 5</Typography>
                         </View>
 
                         {/* Progress Bar */}
                         <View style={styles.progressBarContainer}>
-                            <View style={[styles.progressBarFill, { width: '20%' }]} />
+                            <View style={[styles.progressBarFill, { width: '40%' }]} />
                         </View>
                     </View>
 
                     {/* Title Section */}
                     <View style={styles.titleSection}>
                         <Typography size="3xl" weight="bold" color="#0F172A" style={{ lineHeight: 40 }}>
-                            Where are you flying?
+                            {transportCopy.title}
                         </Typography>
                         <Typography size="md" color={COLORS.background.slate[600]} style={{ marginTop: 12, lineHeight: 24 }}>
-                            Enter your departure and arrival airports to find delivery requests on your route.
+                            {transportCopy.subtitle}
                         </Typography>
                     </View>
 
@@ -112,13 +172,13 @@ export const TravelerRouteScreen: React.FC<TravelerRouteScreenProps> = ({ onNext
                     <View style={styles.inputsContainer}>
                         {/* Departure */}
                         <View style={styles.inputLabelRow}>
-                            <Typography size="sm" weight="semibold" color="#0F172A">Departure Airport</Typography>
+                            <Typography size="sm" weight="semibold" color="#0F172A">{transportCopy.fromLabel}</Typography>
                         </View>
                         <View style={styles.inputWrapper}>
-                            <PlaneTakeoff color={COLORS.background.slate[400]} size={24} />
+                            <DepIcon color={COLORS.background.slate[400]} size={24} />
                             <TextInput
                                 style={styles.input}
-                                placeholder="Airport, city or country"
+                                placeholder={transportCopy.placeholder}
                                 placeholderTextColor={COLORS.background.slate[400]}
                                 value={from}
                                 onChangeText={(t) => { setFrom(t); setActiveField('from'); }}
@@ -128,19 +188,19 @@ export const TravelerRouteScreen: React.FC<TravelerRouteScreenProps> = ({ onNext
 
                         {activeField === 'from' && fromSuggestions.length > 0 && (
                             <View style={styles.suggestionsBox}>
-                                {fromSuggestions.map((a) => (
+                                {fromSuggestions.map((s, i) => (
                                     <TouchableOpacity
-                                        key={a.code}
+                                        key={s.kind === 'airport' ? s.airport.code : `${s.city}-${s.country}-${i}`}
                                         style={styles.suggestionItem}
-                                        onPress={() => handleSelectAirport(a, 'from')}
+                                        onPress={() => handleSelectSuggestion(s, 'from')}
                                     >
                                         <MapPin color={COLORS.background.slate[400]} size={16} />
                                         <View style={{ flex: 1, marginLeft: 10 }}>
                                             <Typography size="sm" weight="bold" color="#0F172A">
-                                                {a.code} · {a.city}
+                                                {s.kind === 'airport' ? `${s.airport.code} · ${s.airport.city}` : s.city}
                                             </Typography>
                                             <Typography size="xs" color={COLORS.background.slate[500]}>
-                                                {a.name}, {a.country}
+                                                {s.kind === 'airport' ? `${s.airport.name}, ${s.airport.country}` : s.country}
                                             </Typography>
                                         </View>
                                     </TouchableOpacity>
@@ -157,13 +217,13 @@ export const TravelerRouteScreen: React.FC<TravelerRouteScreenProps> = ({ onNext
 
                         {/* Arrival */}
                         <View style={styles.inputLabelRow}>
-                            <Typography size="sm" weight="semibold" color="#0F172A">Arrival Airport</Typography>
+                            <Typography size="sm" weight="semibold" color="#0F172A">{transportCopy.toLabel}</Typography>
                         </View>
                         <View style={styles.inputWrapper}>
-                            <PlaneLanding color={COLORS.background.slate[400]} size={24} />
+                            <ArrIcon color={COLORS.background.slate[400]} size={24} />
                             <TextInput
                                 style={styles.input}
-                                placeholder="Airport, city or country"
+                                placeholder={transportCopy.placeholder}
                                 placeholderTextColor={COLORS.background.slate[400]}
                                 value={to}
                                 onChangeText={(t) => { setTo(t); setActiveField('to'); }}
@@ -173,19 +233,19 @@ export const TravelerRouteScreen: React.FC<TravelerRouteScreenProps> = ({ onNext
 
                         {activeField === 'to' && toSuggestions.length > 0 && (
                             <View style={styles.suggestionsBox}>
-                                {toSuggestions.map((a) => (
+                                {toSuggestions.map((s, i) => (
                                     <TouchableOpacity
-                                        key={a.code}
+                                        key={s.kind === 'airport' ? s.airport.code : `${s.city}-${s.country}-${i}`}
                                         style={styles.suggestionItem}
-                                        onPress={() => handleSelectAirport(a, 'to')}
+                                        onPress={() => handleSelectSuggestion(s, 'to')}
                                     >
                                         <MapPin color={COLORS.background.slate[400]} size={16} />
                                         <View style={{ flex: 1, marginLeft: 10 }}>
                                             <Typography size="sm" weight="bold" color="#0F172A">
-                                                {a.code} · {a.city}
+                                                {s.kind === 'airport' ? `${s.airport.code} · ${s.airport.city}` : s.city}
                                             </Typography>
                                             <Typography size="xs" color={COLORS.background.slate[500]}>
-                                                {a.name}, {a.country}
+                                                {s.kind === 'airport' ? `${s.airport.name}, ${s.airport.country}` : s.country}
                                             </Typography>
                                         </View>
                                     </TouchableOpacity>

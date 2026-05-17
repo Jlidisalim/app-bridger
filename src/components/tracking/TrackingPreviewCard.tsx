@@ -4,12 +4,13 @@
 
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { ChevronRight, Plane, MapPin, Package } from 'lucide-react-native';
+import { ChevronRight, Plane, MapPin, Package, Ship } from 'lucide-react-native';
 import { COLORS, RADIUS, SPACING } from '../../theme/theme';
 import { Typography } from '../Typography';
 import { useTrackingStore, selectDeal } from '../../store/tracking.store';
 import { GPSMapView } from './GPSMapView';
 import { FlightMapView } from './FlightMapView';
+import { BoatMapView } from './BoatMapView';
 
 export interface TrackingPreviewDeal {
   id:               string;
@@ -56,9 +57,9 @@ export const TrackingPreviewCard: React.FC<Props> = ({ deal, onActivate, onOpen 
             {deal.fromCity ?? deal.fromIata ?? '—'} → {deal.toCity ?? deal.toIata ?? '—'}
           </Typography>
         </View>
-        <View style={[styles.pill, { backgroundColor: isActive ? COLORS.success : COLORS.background.slate[200] }]}>
+        <View style={[styles.pill, { backgroundColor: isActive ? pillBg(state.mode) : COLORS.background.slate[200] }]}>
           <Typography size="xs" color={isActive ? '#fff' : COLORS.background.slate[700]} weight="bold">
-            {isActive ? (state.mode === 'flight' ? 'IN AIR' : 'LIVE') : 'MATCHED'}
+            {isActive ? pillText(state.mode) : 'MATCHED'}
           </Typography>
         </View>
       </View>
@@ -71,6 +72,14 @@ export const TrackingPreviewCard: React.FC<Props> = ({ deal, onActivate, onOpen 
                 dealId={deal.id}
                 origin={deal.origin ? { ...deal.origin, iata: deal.fromIata ?? undefined } : null}
                 destination={deal.destination ? { ...deal.destination, iata: deal.toIata ?? undefined } : null}
+                interactive={false}
+                showOverlay={false}
+              />
+            ) : state.mode === 'boat' ? (
+              <BoatMapView
+                dealId={deal.id}
+                origin={deal.origin ? { ...deal.origin, code: deal.fromIata ?? undefined } : null}
+                destination={deal.destination ? { ...deal.destination, code: deal.toIata ?? undefined } : null}
                 interactive={false}
                 showOverlay={false}
               />
@@ -96,6 +105,15 @@ export const TrackingPreviewCard: React.FC<Props> = ({ deal, onActivate, onOpen 
                 <Typography size="sm" color={COLORS.background.slate[700]}>
                   {state.flight.callsign ?? '—'}
                   {state.flight.currentPosition && `  ·  ${state.flight.currentPosition.velocityKmh} km/h`}
+                </Typography>
+              </View>
+            ) : state.mode === 'boat' ? (
+              <View style={styles.statusItem}>
+                <Ship size={14} color="#22d3ee" />
+                <Typography size="sm" color={COLORS.background.slate[700]}>
+                  {state.boat.currentPosition?.name ?? (state.boat.mmsi ? `MMSI ${state.boat.mmsi}` : '—')}
+                  {state.boat.currentPosition?.sogKnots != null &&
+                    `  ·  ${state.boat.currentPosition.sogKnots.toFixed(1)} kn`}
                 </Typography>
               </View>
             ) : (
@@ -128,6 +146,18 @@ export const TrackingPreviewCard: React.FC<Props> = ({ deal, onActivate, onOpen 
     </TouchableOpacity>
   );
 };
+
+function pillBg(mode: 'idle' | 'gps' | 'flight' | 'boat'): string {
+  if (mode === 'flight') return COLORS.info;
+  if (mode === 'boat')   return '#22d3ee';
+  return COLORS.success;
+}
+
+function pillText(mode: 'idle' | 'gps' | 'flight' | 'boat'): string {
+  if (mode === 'flight') return 'IN AIR';
+  if (mode === 'boat')   return 'AT SEA';
+  return 'LIVE';
+}
 
 const styles = StyleSheet.create({
   card: {

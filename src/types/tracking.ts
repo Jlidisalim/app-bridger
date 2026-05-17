@@ -1,6 +1,6 @@
 // Mobile tracking types — kept in sync with backend tracking.service serializeSession.
 
-export type TrackingMode = 'idle' | 'gps' | 'flight';
+export type TrackingMode = 'idle' | 'gps' | 'flight' | 'boat';
 
 export interface LatLng {
   latitude:  number;
@@ -33,6 +33,28 @@ export interface FlightPosition {
   updatedAt:     number;
 }
 
+// AIS vessel position. Several fields are nullable because AIS uses sentinel
+// values (e.g. heading=511) when data is unavailable — we normalize those to null.
+export interface VesselPosition {
+  mmsi:        number;
+  imo:         number | null;
+  name:        string | null;
+  callsign:    string | null;
+  lat:         number;
+  lng:         number;
+  cogDeg:      number | null;
+  sogKnots:    number | null;
+  sogKmh:      number | null;
+  headingDeg:  number | null;
+  navStatus:   number | null;
+  type:        number | null;
+  draughtM:    number | null;
+  destination: string | null;
+  eta:         string | null;
+  isStale:     boolean;
+  updatedAt:   number;
+}
+
 export interface TrackingSessionDTO {
   dealId: string;
   mode:   TrackingMode;
@@ -62,6 +84,26 @@ export interface TrackingSessionDTO {
     updatedAt:    number | null;
     lastPollAt:   number | null;
   };
+  boat: {
+    isActive:    boolean;
+    mmsi:        number | null;
+    imo:         number | null;
+    name:        string | null;
+    callsign:    string | null;
+    lat:         number | null;
+    lng:         number | null;
+    cogDeg:      number | null;
+    sogKnots:    number | null;
+    headingDeg:  number | null;
+    navStatus:   number | null;
+    type:        number | null;
+    draughtM:    number | null;
+    destination: string | null;
+    eta:         string | null;
+    isStale:     boolean | null;
+    updatedAt:   number | null;
+    lastPollAt:  number | null;
+  };
 }
 
 // Per-deal tracking state held in the Zustand store.
@@ -85,6 +127,14 @@ export interface TrackingDealState {
     positionHistory:      FlightPosition[];
     routePath:            LatLng[];
     lastPollAt:           number | null;
+  };
+  boat: {
+    isActive:        boolean;
+    mmsi:            number | null;
+    currentPosition: VesselPosition | null;
+    positionHistory: VesselPosition[];
+    routePath:       LatLng[];
+    lastPollAt:      number | null;
   };
   smartSwitch: {
     pendingPrompt: boolean;

@@ -40,7 +40,9 @@ import { HelpSupportScreen } from '../screens/HelpSupportScreen';
 import { DepositScreen } from '../screens/DepositScreen';
 import { WithdrawScreen } from '../screens/WithdrawScreen';
 import { ReceiverCodeScreen } from '../screens/ReceiverCodeScreen';
+import { ReceivedPackagesScreen } from '../screens/ReceivedPackagesScreen';
 import { ReservationScreen } from '../screens/ReservationScreen';
+import { DealRequestsScreen, TripRequestsScreen } from '../screens/IncomingRequestsScreen';
 
 const Stack = createNativeStackNavigator<AppStackParamList>();
 
@@ -59,7 +61,7 @@ const CreateSelectionWrapper = ({ navigation }: any) => {
       }}
       onSelectTraveler={() => {
         setMode('traveler');
-        navigation.navigate('TravelerRoute');
+        navigation.navigate('FlightDetails');
       }}
     />
   );
@@ -166,7 +168,7 @@ const TravelerRouteWrapper = ({ navigation }: any) => {
     <TravelerRouteScreen
       onNext={(data) => {
         setTravelerRoute({ from: data.from, to: data.to });
-        navigation.navigate('FlightDetails');
+        navigation.navigate('Capacity');
       }}
       onBack={() => navigation.goBack()}
     />
@@ -179,7 +181,7 @@ const FlightDetailsWrapper = ({ navigation }: any) => {
     <FlightDetailsScreen
       onNext={(data) => {
         setTravelerFlight({ date: data.date || new Date().toISOString().slice(0, 10), time: data.time || '14:30', flexible: data.flexible ?? true });
-        navigation.navigate('Capacity');
+        navigation.navigate('TravelerRoute');
       }}
       onBack={() => navigation.goBack()}
     />
@@ -275,6 +277,9 @@ function mapDealToScreen(raw: any) {
     totalDeals: person?.totalDeals ?? raw.totalDeals,
     sender: raw.sender,
     traveler: raw.traveler,
+    senderId: raw.senderId ?? raw.sender?.id,
+    travelerId: raw.travelerId ?? raw.traveler?.id,
+    receiverHasAccount: !!raw.receiverHasAccount,
     route: {
       from: raw.fromCity,
       to: raw.toCity,
@@ -301,6 +306,7 @@ const DealDetailsWrapper = ({ navigation, route }: any) => {
   const trips = useAppStore((s) => s.trips);
   const fetchDeals = useAppStore((s) => s.fetchDeals);
   const fetchTrips = useAppStore((s) => s.fetchTrips);
+  const currentUser = useAppStore((s) => s.currentUser);
 
   // Seed from store so screen shows instantly (no blank state while fetching)
   const storeItem = type === 'trip'
@@ -361,21 +367,61 @@ const DealDetailsWrapper = ({ navigation, route }: any) => {
         if (accepting) return;
         setAccepting(true);
         try {
-          const result = await dealsAPI.acceptDeal(dealId, price);
+          // Deals = traveler requests a sender's deal; Trips = sender requests a traveler's trip.
+          // Both create a PENDING request — the other party must approve before any escrow moves.
+          const result = type === 'trip'
+            ? await dealsAPI.acceptTrip(dealId, { amount: price })
+            : await dealsAPI.acceptDeal(dealId, price);
           if (result && (result as any).success !== false) {
-            navigation.navigate('Tracking', { dealId });
+            Alert.alert(
+              'Request Sent',
+              type === 'trip'
+                ? 'The traveler will be notified. You will be matched once they accept.'
+                : 'The sender will be notified. You will be matched once they accept your request.',
+              [{ text: 'OK', onPress: () => navigation.goBack() }]
+            );
           } else {
-            const msg = (result as any)?.error || (result as any)?.message || 'Failed to accept deal. Please try again.';
+            const msg = (result as any)?.error || (result as any)?.message || 'Failed to send request. Please try again.';
             Alert.alert('Error', msg);
           }
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Network error. Please try again.';
-          Alert.alert('Failed to Accept Deal', message);
+          Alert.alert('Failed to Send Request', message);
         } finally {
           setAccepting(false);
         }
       }}
       onChat={(user: any) => navigation.navigate('ChatDetail', { user: { ...user, dealId: dealId } })}
+      canGroupChat={
+        type === 'deal' &&
+        !!deal?.receiverHasAccount &&
+        !!currentUser?.id &&
+        (currentUser.id === deal?.senderId || currentUser.id === deal?.travelerId)
+      }
+      onGroupChat={async () => {
+        try {
+          const result = await chatAPI.getOrCreateGroupRoom(dealId);
+          if (!result.id) {
+            Alert.alert(
+              'Group chat unavailable',
+              result.code === 'RECEIVER_NO_ACCOUNT'
+                ? 'The receiver does not have a Bridger account yet.'
+                : (result.error || 'Could not open the group chat.'),
+            );
+            return;
+          }
+          navigation.navigate('ChatDetail', {
+            user: {
+              name: 'Deal Group Chat',
+              conversationId: result.id,
+              dealId,
+              isGroup: true,
+            },
+          });
+        } catch (e: any) {
+          Alert.alert('Group chat unavailable', e?.message || 'Could not open the group chat.');
+        }
+      }}
       isDeleting={deleting}
       onDelete={isOwner ? () => {
         // CancelDialog already called the API — just refresh lists and go back
@@ -390,17 +436,27 @@ const DealDetailsWrapper = ({ navigation, route }: any) => {
 const TrackingWrapper = ({ navigation, route }: any) => {
   const dealId = route.params.dealId;
   const deals = useAppStore((s) => s.deals);
+  const receivedPackages = useAppStore((s) => s.receivedPackages);
   const currentUser = useAppStore((s) => s.currentUser);
-  const deal: any = deals.find((d) => d.id === dealId) || { id: dealId, name: 'Unknown', routeString: 'N/A' };
+  // Look up the deal in both lists — receivers won't have it in their own `deals`.
+  const deal: any =
+    deals.find((d) => d.id === dealId) ||
+    receivedPackages.find((d: any) => d.id === dealId) ||
+    { id: dealId, name: 'Unknown', routeString: 'N/A' };
 
   const isSender = currentUser?.id === deal?.senderId;
+  // Receiver match is phone-based: the sender stored the receiver's phone on the deal.
+  const userPhone = (currentUser?.phone || '').replace(/\D/g, '');
+  const receiverPhone = (deal?.receiverPhone || '').replace(/\D/g, '');
+  const isReceiver = !!userPhone && !!receiverPhone && userPhone === receiverPhone && !isSender;
 
   return (
     <TrackingScreen
       deal={deal}
       currentUserId={currentUser?.id}
       isSender={isSender}
-      onBack={() => navigation.navigate('MainTabs', { screen: 'HomeTab' })}
+      isReceiver={isReceiver}
+      onBack={() => navigation.goBack()}
       onGenerateQR={() => navigation.navigate('DeliveryConfirmation', { dealId })}
       onScanQR={() => navigation.navigate('PickupScan', { dealId })}
       onCancel={() => navigation.navigate('MainTabs', { screen: 'HomeTab' })}
@@ -408,15 +464,16 @@ const TrackingWrapper = ({ navigation, route }: any) => {
       onReceiverCode={() => navigation.navigate('ReceiverCode', { dealId })}
       onLiveTracking={() => navigation.navigate('LiveTracking', { dealId })}
       onChat={() => {
-        const otherUser = isSender ? deal?.traveler : deal?.sender;
+        // Receiver chats with the sender; sender/traveler chat with the other party.
+        const otherUser = isReceiver ? deal?.sender : (isSender ? deal?.traveler : deal?.sender);
         if (otherUser) {
-          navigation.navigate('ChatDetail', { 
-            user: { 
-              ...otherUser, 
-              userId: otherUser.id, 
+          navigation.navigate('ChatDetail', {
+            user: {
+              ...otherUser,
+              userId: otherUser.id,
               avatar: otherUser.profilePhoto,
-              dealId 
-            } 
+              dealId
+            }
           });
         }
       }}
@@ -590,6 +647,8 @@ export const AppStack = () => {
       <Stack.Screen name="Dispute" component={DisputeWrapper} />
       <Stack.Screen name="ReceiverCode" component={ReceiverCodeWrapper} />
       <Stack.Screen name="Reservation" component={ReservationWrapper} />
+      <Stack.Screen name="DealRequests" component={DealRequestsScreen} />
+      <Stack.Screen name="TripRequests" component={TripRequestsScreen} />
       {/* Auxiliary */}
       <Stack.Screen name="ChatDetail" component={ChatDetailWrapper} />
       <Stack.Screen name="Wallet" component={WalletWrapper} />
@@ -599,6 +658,7 @@ export const AppStack = () => {
       <Stack.Screen name="Settings" component={SettingsWrapper} />
       <Stack.Screen name="EditProfile" component={EditProfileWrapper} />
       <Stack.Screen name="HelpSupport" component={HelpSupportWrapper} />
+      <Stack.Screen name="ReceivedPackages" component={ReceivedPackagesScreen} />
     </Stack.Navigator>
   );
 };

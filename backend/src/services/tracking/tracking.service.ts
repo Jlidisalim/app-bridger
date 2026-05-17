@@ -15,8 +15,13 @@ import {
   startFlightPolling,
   stopFlightPolling,
 } from './flightPoller';
+import {
+  startVesselPolling,
+  stopVesselPolling,
+} from './vesselPoller';
 import config from '../../config/env';
 import type { FlightPosition } from '../opensky/opensky.types';
+import type { VesselPosition } from '../aishub/aishub.types';
 import type { LatLng } from './geo.utils';
 
 // --- Access control helpers --------------------------------------------------
@@ -52,6 +57,9 @@ export async function activateTracking(
   if (input.mode === 'flight' && !input.callsign) {
     throw new HttpError(400, 'callsign is required for flight mode');
   }
+  if (input.mode === 'boat' && (input.mmsi == null || !Number.isFinite(input.mmsi))) {
+    throw new HttpError(400, 'mmsi is required for boat mode');
+  }
 
   const session = await prisma.trackingSession.upsert({
     where: { dealId: deal.id },
@@ -61,12 +69,18 @@ export async function activateTracking(
       gpsActive:      input.mode === 'gps',
       flightActive:   input.mode === 'flight',
       flightCallsign: input.callsign ?? null,
+      boatActive:     input.mode === 'boat',
+      boatMmsi:       input.mode === 'boat' && input.mmsi != null ? BigInt(input.mmsi) : null,
     },
     update: {
       mode:           input.mode,
       gpsActive:      input.mode === 'gps',
       flightActive:   input.mode === 'flight',
-      flightCallsign: input.callsign ?? null,
+      flightCallsign: input.mode === 'flight' ? input.callsign ?? null : undefined,
+      boatActive:     input.mode === 'boat',
+      boatMmsi:       input.mode === 'boat' && input.mmsi != null
+                        ? BigInt(input.mmsi)
+                        : input.mode !== 'boat' ? undefined : null,
       gpsLostAt:      input.mode === 'gps' ? null : undefined,
     },
   });
@@ -75,6 +89,12 @@ export async function activateTracking(
     startFlightPolling({ dealId: deal.id, callsign: input.callsign });
   } else {
     stopFlightPolling(deal.id);
+  }
+
+  if (input.mode === 'boat' && input.mmsi != null) {
+    startVesselPolling({ dealId: deal.id, mmsi: input.mmsi });
+  } else {
+    stopVesselPolling(deal.id);
   }
 
   emitToDeal(deal.id, TRACKING_EVENTS.ACTIVATED, {
@@ -89,11 +109,12 @@ export async function activateTracking(
 export async function deactivateTracking(userId: string, dealId: string) {
   const deal = await loadDealForTraveler(dealId, userId);
   stopFlightPolling(deal.id);
+  stopVesselPolling(deal.id);
 
   const session = await prisma.trackingSession.upsert({
     where: { dealId: deal.id },
     create: { dealId: deal.id, mode: 'idle' },
-    update: { mode: 'idle', gpsActive: false, flightActive: false },
+    update: { mode: 'idle', gpsActive: false, flightActive: false, boatActive: false },
   });
 
   emitToDeal(deal.id, TRACKING_EVENTS.DEACTIVATED, { dealId: deal.id });
@@ -103,14 +124,19 @@ export async function deactivateTracking(userId: string, dealId: string) {
 export async function switchMode(
   userId: string,
   dealId: string,
-  newMode: 'gps' | 'flight',
-  callsign?: string,
+  newMode: 'gps' | 'flight' | 'boat',
+  opts: { callsign?: string; mmsi?: number } = {},
 ) {
   const deal = await loadDealForTraveler(dealId, userId);
   const prev = await prisma.trackingSession.findUnique({ where: { dealId: deal.id } });
 
   const oldMode = (prev?.mode as TrackingMode) ?? 'idle';
-  await activateTracking(userId, { dealId: deal.id, mode: newMode, callsign });
+  await activateTracking(userId, {
+    dealId:   deal.id,
+    mode:     newMode,
+    callsign: opts.callsign,
+    mmsi:     opts.mmsi,
+  });
   emitToDeal(deal.id, TRACKING_EVENTS.MODE_SWITCHED, {
     dealId: deal.id,
     oldMode,
@@ -304,6 +330,64 @@ export async function markPollMeta(dealId: string) {
   }).catch(() => {});
 }
 
+// --- Vessel push helpers (called by the vessel poller) ----------------------
+export async function applyVesselUpdate(
+  dealId: string,
+  position: VesselPosition,
+) {
+  await prisma.trackingSession.update({
+    where: { dealId },
+    data: {
+      boatLat:         position.lat,
+      boatLng:         position.lng,
+      boatCogDeg:      position.cogDeg,
+      boatSogKnots:    position.sogKnots,
+      boatHeadingDeg:  position.headingDeg,
+      boatNavStatus:   position.navStatus,
+      boatType:        position.type,
+      boatDraughtM:    position.draughtM,
+      boatDestination: position.destination,
+      boatEta:         position.eta,
+      boatStale:       position.isStale,
+      boatName:        position.name,
+      boatCallsign:    position.callsign,
+      boatImo:         position.imo != null ? BigInt(position.imo) : null,
+      boatUpdatedAt:   new Date(position.updatedAt),
+      boatLastPollAt:  new Date(),
+    },
+  });
+
+  await prisma.positionLog.create({
+    data: {
+      dealId,
+      mode:       'boat',
+      lat:        position.lat,
+      lng:        position.lng,
+      altitudeM:  null,
+      headingDeg: position.headingDeg ?? position.cogDeg ?? null,
+      speedMs:    position.sogKnots != null ? position.sogKnots * 0.514444 : null,
+      source:     'aishub',
+      loggedAt:   new Date(position.updatedAt),
+    },
+  });
+
+  emitToDeal(dealId, TRACKING_EVENTS.VESSEL_UPDATE, {
+    dealId,
+    position,
+  });
+}
+
+export async function markVesselNotFound(dealId: string, mmsi: number) {
+  emitToDeal(dealId, TRACKING_EVENTS.VESSEL_NOT_FOUND, { dealId, mmsi });
+}
+
+export async function markVesselPollMeta(dealId: string) {
+  await prisma.trackingSession.update({
+    where: { dealId },
+    data:  { boatLastPollAt: new Date() },
+  }).catch(() => {});
+}
+
 // --- Watchdog: scans for stale GPS sessions ---------------------------------
 // Runs every 30s. If a gps-active session hasn't reported in
 // gpsLossThresholdMs, mark it lost and notify.
@@ -375,6 +459,26 @@ export function serializeSession(s: any) {
       isStale:       s.flightStale,
       updatedAt:     s.flightUpdatedAt?.getTime?.() ?? null,
       lastPollAt:    s.flightLastPollAt?.getTime?.() ?? null,
+    },
+    boat: {
+      isActive:    s.boatActive ?? false,
+      mmsi:        s.boatMmsi != null ? Number(s.boatMmsi) : null,
+      imo:         s.boatImo  != null ? Number(s.boatImo)  : null,
+      name:        s.boatName ?? null,
+      callsign:    s.boatCallsign ?? null,
+      lat:         s.boatLat ?? null,
+      lng:         s.boatLng ?? null,
+      cogDeg:      s.boatCogDeg ?? null,
+      sogKnots:    s.boatSogKnots ?? null,
+      headingDeg:  s.boatHeadingDeg ?? null,
+      navStatus:   s.boatNavStatus ?? null,
+      type:        s.boatType ?? null,
+      draughtM:    s.boatDraughtM ?? null,
+      destination: s.boatDestination ?? null,
+      eta:         s.boatEta ?? null,
+      isStale:     s.boatStale ?? null,
+      updatedAt:   s.boatUpdatedAt?.getTime?.() ?? null,
+      lastPollAt:  s.boatLastPollAt?.getTime?.() ?? null,
     },
   };
 }

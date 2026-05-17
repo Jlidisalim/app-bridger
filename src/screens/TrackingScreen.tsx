@@ -48,6 +48,9 @@ interface TrackingScreenProps {
     deal: any;
     currentUserId?: string;
     isSender?: boolean;
+    // True when the current user is the named receiver on this deal (phone match).
+    // Drives the receiver-oriented action panel.
+    isReceiver?: boolean;
     onBack: () => void;
     onGenerateQR: () => void;
     onScanQR?: () => void;
@@ -58,7 +61,7 @@ interface TrackingScreenProps {
     onLiveTracking?: () => void;
 }
 
-export const TrackingScreen: React.FC<TrackingScreenProps> = ({ deal, currentUserId, isSender, onBack, onGenerateQR, onScanQR, onCancel, onDispute, onReceiverCode, onChat, onLiveTracking }) => {
+export const TrackingScreen: React.FC<TrackingScreenProps> = ({ deal, currentUserId, isSender, isReceiver, onBack, onGenerateQR, onScanQR, onCancel, onDispute, onReceiverCode, onChat, onLiveTracking }) => {
     const currency = useUserCurrency();
     const [showQRModal, setShowQRModal] = useState(false);
     const [showPickupModal, setShowPickupModal] = useState(false);
@@ -339,6 +342,35 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({ deal, currentUse
                     </View>
                 </View>
 
+                {/* Sender info — receiver-facing: "who put me as the receiver" */}
+                {isReceiver && deal?.sender && (
+                    <View style={styles.section}>
+                        <Typography weight="bold" size="xs" color={COLORS.background.slate[400]} style={styles.sectionLabel}>
+                            SENT BY
+                        </Typography>
+                        <View style={styles.senderCard}>
+                            <View style={styles.senderAvatar}>
+                                <User size={22} color={COLORS.primary} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Typography weight="bold" size="md">{deal.sender.name || 'Sender'}</Typography>
+                                {!!deal.sender.rating && (
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                                        <Star size={12} color={COLORS.primary} fill={COLORS.primary} />
+                                        <Typography size="xs" color={COLORS.background.slate[500]}>{Number(deal.sender.rating).toFixed(1)}</Typography>
+                                    </View>
+                                )}
+                            </View>
+                            {deal.sender.verified && (
+                                <View style={styles.verifiedTag}>
+                                    <Check size={12} color="#15803d" />
+                                    <Typography size="xs" weight="bold" color="#15803d" style={{ marginLeft: 4 }}>Verified</Typography>
+                                </View>
+                            )}
+                        </View>
+                    </View>
+                )}
+
                 {/* Shipment Overview */}
                 <View style={styles.section}>
                     <View style={styles.sectionHeader}>
@@ -460,6 +492,26 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({ deal, currentUse
                             <TouchableOpacity style={[styles.primaryButton, { backgroundColor: '#1976D2', marginBottom: 10 }]} onPress={onChat}>
                                 <MessageCircle size={20} color={COLORS.white} />
                                 <Typography weight="bold" color={COLORS.white} style={{ marginLeft: 10 }}>Conversation</Typography>
+                            </TouchableOpacity>
+                        )}
+                    </>
+                )}
+
+                {/* RECEIVER ACTIONS — visible when the current user is the named receiver
+                    (phone match) and not also the sender. Receiver scans the traveler's
+                    delivery QR to confirm handover. */}
+                {isReceiver && (
+                    <>
+                        {(dealStatus === 'IN_TRANSIT' || dealStatus === 'DELIVERED' || dealStatus === 'arrived') && (
+                            <TouchableOpacity style={[styles.primaryButton, { backgroundColor: '#7C3AED', marginBottom: 10 }]} onPress={handleReceiverScan}>
+                                <Scan size={20} color={COLORS.white} />
+                                <Typography weight="bold" color={COLORS.white} style={{ marginLeft: 10 }}>Scan Delivery QR</Typography>
+                            </TouchableOpacity>
+                        )}
+                        {onChat && deal?.sender && (
+                            <TouchableOpacity style={[styles.primaryButton, { backgroundColor: '#1976D2', marginBottom: 10 }]} onPress={onChat}>
+                                <MessageCircle size={20} color={COLORS.white} />
+                                <Typography weight="bold" color={COLORS.white} style={{ marginLeft: 10 }}>Message sender</Typography>
                             </TouchableOpacity>
                         )}
                     </>
@@ -841,6 +893,32 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: 16,
+    },
+    senderCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        backgroundColor: COLORS.white,
+        padding: SPACING.lg,
+        borderRadius: RADIUS.xl,
+        borderWidth: 1,
+        borderColor: `${COLORS.primary}10`,
+    },
+    senderAvatar: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: `${COLORS.primary}0D`,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    verifiedTag: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#f0fdf4',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 999,
     },
     tag: {
         backgroundColor: '#EEF2FF',

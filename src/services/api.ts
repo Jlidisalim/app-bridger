@@ -215,13 +215,83 @@ export const dealsAPI = {
     return result.data || null;
   },
 
+  // Deals where the authenticated user's phone matches deal.receiverPhone —
+  // i.e., packages addressed to me as a receiver.
+  getReceivedPackages: async (params?: { page?: number; limit?: number }): Promise<{ items: any[]; hasMore: boolean; total: number; page: number }> => {
+    const qs = new URLSearchParams();
+    if (params?.page) qs.append('page', String(params.page));
+    if (params?.limit) qs.append('limit', String(params.limit));
+    const query = qs.toString() ? `?${qs.toString()}` : '';
+    const result = await apiClient.get<any>(`/deals/as-receiver${query}`);
+    const data = result.data;
+    if (data && typeof data === 'object' && 'items' in data) {
+      return { items: data.items || [], hasMore: data.hasMore ?? false, total: data.total ?? 0, page: data.page ?? 1 };
+    }
+    const items = Array.isArray(data) ? data : [];
+    return { items, hasMore: false, total: items.length, page: 1 };
+  },
+
   getTrip: async (tripId: string): Promise<any | null> => {
     const result = await apiClient.get<any>(`/trips/${tripId}`);
     return result.data || null;
   },
 
-  acceptDeal: async (dealId: string, price: number): Promise<{ success: boolean; error?: string }> => {
-    const result = await apiClient.post<any>(`/deals/${dealId}/match`, { price });
+  // Traveler asks to carry a sender's deal. Creates a PENDING DealRequest;
+  // the sender must accept it before the deal becomes MATCHED.
+  acceptDeal: async (dealId: string, price: number, message?: string): Promise<{ success: boolean; requestId?: string; error?: string }> => {
+    const result = await apiClient.post<{ request: { id: string } }>(`/deals/${dealId}/match`, { price, message });
+    return { success: result.success, requestId: result.data?.request?.id, error: result.error };
+  },
+
+  // Sender lists the pending/decided requests on their own deal.
+  listDealRequests: async (dealId: string): Promise<{ success: boolean; items: any[]; error?: string }> => {
+    const result = await apiClient.get<{ items: any[] }>(`/deals/${dealId}/requests`);
+    return { success: result.success, items: result.data?.items || [], error: result.error };
+  },
+
+  acceptDealRequest: async (dealId: string, requestId: string): Promise<{ success: boolean; error?: string }> => {
+    const result = await apiClient.post<any>(`/deals/${dealId}/requests/${requestId}/accept`, {});
+    return { success: result.success, error: result.error };
+  },
+
+  rejectDealRequest: async (dealId: string, requestId: string): Promise<{ success: boolean; error?: string }> => {
+    const result = await apiClient.post<any>(`/deals/${dealId}/requests/${requestId}/reject`, {});
+    return { success: result.success, error: result.error };
+  },
+
+  withdrawDealRequest: async (dealId: string, requestId: string): Promise<{ success: boolean; error?: string }> => {
+    const result = await apiClient.post<any>(`/deals/${dealId}/requests/${requestId}/withdraw`, {});
+    return { success: result.success, error: result.error };
+  },
+
+  // Trip requests (sender asks to ship on a traveler's trip).
+  acceptTrip: async (tripId: string, body: {
+    amount?: number;
+    title?: string; description?: string; packageSize?: string;
+    weight?: number; itemValue?: number; isFragile?: boolean;
+    receiverName?: string; receiverPhone?: string; message?: string;
+  } = {}): Promise<{ success: boolean; requestId?: string; error?: string }> => {
+    const result = await apiClient.post<{ request: { id: string } }>(`/trips/${tripId}/accept`, body);
+    return { success: result.success, requestId: result.data?.request?.id, error: result.error };
+  },
+
+  listTripRequests: async (tripId: string): Promise<{ success: boolean; items: any[]; error?: string }> => {
+    const result = await apiClient.get<{ items: any[] }>(`/trips/${tripId}/requests`);
+    return { success: result.success, items: result.data?.items || [], error: result.error };
+  },
+
+  acceptTripRequest: async (tripId: string, requestId: string): Promise<{ success: boolean; dealId?: string; error?: string }> => {
+    const result = await apiClient.post<{ deal: { id: string } }>(`/trips/${tripId}/requests/${requestId}/accept`, {});
+    return { success: result.success, dealId: result.data?.deal?.id, error: result.error };
+  },
+
+  rejectTripRequest: async (tripId: string, requestId: string): Promise<{ success: boolean; error?: string }> => {
+    const result = await apiClient.post<any>(`/trips/${tripId}/requests/${requestId}/reject`, {});
+    return { success: result.success, error: result.error };
+  },
+
+  withdrawTripRequest: async (tripId: string, requestId: string): Promise<{ success: boolean; error?: string }> => {
+    const result = await apiClient.post<any>(`/trips/${tripId}/requests/${requestId}/withdraw`, {});
     return { success: result.success, error: result.error };
   },
 
@@ -347,6 +417,16 @@ export const chatAPI = {
     const body = type === 'trip' ? { tripId: id } : { dealId: id };
     const result = await apiClient.post<{ id: string }>('/chat/rooms', body);
     return result.data?.id || '';
+  },
+
+  // Get or create a 3-party group chat (sender + traveler + receiver) for a deal.
+  // Backend resolves the receiver from deal.receiverPhone; throws if not found.
+  getOrCreateGroupRoom: async (dealId: string): Promise<{ id: string; error?: string; code?: string }> => {
+    const result = await apiClient.post<{ id: string }>('/chat/rooms/group', { dealId });
+    if (!result.success) {
+      return { id: '', error: result.error, code: (result as any).code };
+    }
+    return { id: result.data?.id || '' };
   },
 };
 

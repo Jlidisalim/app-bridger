@@ -1,4 +1,4 @@
-export type TrackingMode = 'idle' | 'gps' | 'flight';
+export type TrackingMode = 'idle' | 'gps' | 'flight' | 'boat';
 
 export interface GPSPositionPayload {
   lat:       number;
@@ -12,6 +12,7 @@ export interface GPSPositionPayload {
 
 export interface ActivateTrackingInput {
   dealId:    string;
-  mode:      'gps' | 'flight';
-  callsign?: string;
+  mode:      'gps' | 'flight' | 'boat';
+  callsign?: string;   // for flight mode
+  mmsi?:     number;   // for boat mode
 }

@@ -10,6 +10,7 @@ import type {
   TrackingDealState,
   TrackingMode,
   TrackingSessionDTO,
+  VesselPosition,
 } from '../types/tracking';
 import { TRACKING } from '../constants/tracking';
 
@@ -30,6 +31,14 @@ const emptyDeal = (dealId: string): TrackingDealState => ({
     callsign: null,
     currentPosition: null,
     interpolatedPosition: null,
+    positionHistory: [],
+    routePath: [],
+    lastPollAt: null,
+  },
+  boat: {
+    isActive: false,
+    mmsi: null,
+    currentPosition: null,
     positionHistory: [],
     routePath: [],
     lastPollAt: null,
@@ -72,6 +81,12 @@ interface TrackingStore {
   setInterpolatedPosition(dealId: string, p: FlightPosition | null): void;
   setFlightRoute(dealId: string, path: LatLng[]): void;
 
+  // Boat (AIS)
+  activateBoat(dealId: string, mmsi: number): void;
+  deactivateBoat(dealId: string): void;
+  pushBoatPosition(dealId: string, p: VesselPosition): void;
+  setBoatRoute(dealId: string, path: LatLng[]): void;
+
   // Smart switch
   promptSmartSwitch(dealId: string): void;
   dismissSmartSwitch(dealId: string): void;
@@ -103,6 +118,7 @@ export const useTrackingStore = create<TrackingStore>((set, get) => ({
     if (!dto || !dto.dealId) return;
     const gps = dto.gps ?? ({} as Partial<TrackingSessionDTO['gps']>);
     const flight = dto.flight ?? ({} as Partial<TrackingSessionDTO['flight']>);
+    const boat = dto.boat ?? ({} as Partial<TrackingSessionDTO['boat']>);
     set((s) =>
       updateDeal(s, dto.dealId, (d) => ({
         ...d,
@@ -147,6 +163,34 @@ export const useTrackingStore = create<TrackingStore>((set, get) => ({
                   updatedAt: flight.updatedAt ?? Date.now(),
                 }
               : d.flight.currentPosition,
+        },
+        boat: {
+          ...d.boat,
+          isActive:   boat.isActive ?? d.boat.isActive,
+          mmsi:       boat.mmsi ?? d.boat.mmsi,
+          lastPollAt: boat.lastPollAt ?? d.boat.lastPollAt,
+          currentPosition:
+            boat.lat != null && boat.lng != null && boat.mmsi != null
+              ? {
+                  mmsi:        boat.mmsi,
+                  imo:         boat.imo ?? null,
+                  name:        boat.name ?? null,
+                  callsign:    boat.callsign ?? null,
+                  lat:         boat.lat,
+                  lng:         boat.lng,
+                  cogDeg:      boat.cogDeg ?? null,
+                  sogKnots:    boat.sogKnots ?? null,
+                  sogKmh:      boat.sogKnots != null ? Math.round(boat.sogKnots * 1.852 * 10) / 10 : null,
+                  headingDeg:  boat.headingDeg ?? null,
+                  navStatus:   boat.navStatus ?? null,
+                  type:        boat.type ?? null,
+                  draughtM:    boat.draughtM ?? null,
+                  destination: boat.destination ?? null,
+                  eta:         boat.eta ?? null,
+                  isStale:     boat.isStale ?? false,
+                  updatedAt:   boat.updatedAt ?? Date.now(),
+                }
+              : d.boat.currentPosition,
         },
       })),
     );
@@ -273,6 +317,52 @@ export const useTrackingStore = create<TrackingStore>((set, get) => ({
   setFlightRoute(dealId, path) {
     set((s) =>
       updateDeal(s, dealId, (d) => ({ ...d, flight: { ...d.flight, routePath: path } })),
+    );
+  },
+
+  activateBoat(dealId, mmsi) {
+    set((s) =>
+      updateDeal(s, dealId, (d) => ({
+        ...d,
+        mode: 'boat',
+        boat:   { ...d.boat,   isActive: true, mmsi },
+        gps:    { ...d.gps,    isActive: false },
+        flight: { ...d.flight, isActive: false, interpolatedPosition: null },
+        smartSwitch: { pendingPrompt: false },
+      })),
+    );
+  },
+
+  deactivateBoat(dealId) {
+    set((s) =>
+      updateDeal(s, dealId, (d) => ({
+        ...d,
+        boat: { ...d.boat, isActive: false },
+      })),
+    );
+  },
+
+  pushBoatPosition(dealId, p) {
+    set((s) =>
+      updateDeal(s, dealId, (d) => {
+        const history = [...d.boat.positionHistory, p].slice(-50);
+        return {
+          ...d,
+          boat: {
+            ...d.boat,
+            mmsi:            p.mmsi,
+            currentPosition: p,
+            positionHistory: history,
+            lastPollAt:      Date.now(),
+          },
+        };
+      }),
+    );
+  },
+
+  setBoatRoute(dealId, path) {
+    set((s) =>
+      updateDeal(s, dealId, (d) => ({ ...d, boat: { ...d.boat, routePath: path } })),
     );
   },
 

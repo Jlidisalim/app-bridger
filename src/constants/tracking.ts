@@ -19,6 +19,8 @@ export const TRACKING_EVENTS = {
   SUGGEST_FLIGHT:   'tracking:suggest_flight',
   FLIGHT_UPDATE:    'tracking:flight_update',
   FLIGHT_NOT_FOUND: 'tracking:flight_not_found',
+  VESSEL_UPDATE:    'tracking:vessel_update',
+  VESSEL_NOT_FOUND: 'tracking:vessel_not_found',
   ERROR:            'tracking:error',
   PONG:             'tracking:pong',
   JOIN_DEAL:        'tracking:join_deal',

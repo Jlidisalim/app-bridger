@@ -54,7 +54,10 @@ export type RootStackParamList = MainTabParamList & {
   Dispute: { dealId: string };
   ReceiverCode: { dealId: string };
   Reservation: { dealId: string };
-  ChatDetail: { user: { name: string; verified?: boolean; conversationId?: string; dealId?: string; phone?: string; avatar?: string; profilePhoto?: string } };
+  ChatDetail: { user: { name: string; verified?: boolean; conversationId?: string; dealId?: string; phone?: string; avatar?: string; profilePhoto?: string; isGroup?: boolean } };
+  // Owner views the pending accept/reject requests on their own listing.
+  DealRequests: { dealId: string };
+  TripRequests: { tripId: string };
 
 
   // Wallet
@@ -67,6 +70,7 @@ export type RootStackParamList = MainTabParamList & {
   Settings: undefined;
   HelpSupport: undefined;
   Notifications: undefined;
+  ReceivedPackages: undefined;
 };
 
 export type AuthStackParamList = {

@@ -6,7 +6,7 @@ import type { TrackingSessionDTO, TrackingMode } from '../../types/tracking';
 
 interface PositionLogPoint {
   id:         string;
-  mode:       'gps' | 'flight';
+  mode:       'gps' | 'flight' | 'boat';
   lat:        number;
   lng:        number;
   altitudeM:  number | null;
@@ -16,22 +16,33 @@ interface PositionLogPoint {
   loggedAt:   string;
 }
 
+interface ActivateOpts {
+  callsign?: string;   // for flight
+  mmsi?:     number;   // for boat
+}
+
 export const trackingApi = {
-  activate: (dealId: string, mode: 'gps' | 'flight', callsign?: string) =>
+  activate: (dealId: string, mode: 'gps' | 'flight' | 'boat', opts: ActivateOpts = {}) =>
     apiClient.post<{ ok: true; session: any }>('/tracking/activate', {
       dealId,
       mode,
-      ...(callsign ? { callsign } : {}),
+      ...(opts.callsign ? { callsign: opts.callsign } : {}),
+      ...(opts.mmsi     ? { mmsi: opts.mmsi }         : {}),
     }),
 
   deactivate: (dealId: string) =>
     apiClient.post<{ ok: true }>('/tracking/deactivate', { dealId }),
 
-  switchMode: (dealId: string, newMode: Exclude<TrackingMode, 'idle'>, callsign?: string) =>
+  switchMode: (
+    dealId: string,
+    newMode: Exclude<TrackingMode, 'idle'>,
+    opts: ActivateOpts = {},
+  ) =>
     apiClient.post<{ ok: true }>('/tracking/switch-mode', {
       dealId,
       newMode,
-      ...(callsign ? { callsign } : {}),
+      ...(opts.callsign ? { callsign: opts.callsign } : {}),
+      ...(opts.mmsi     ? { mmsi: opts.mmsi }         : {}),
     }),
 
   pushGPS: (

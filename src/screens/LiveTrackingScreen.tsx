@@ -11,7 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Plane, MapPin, Power, RefreshCcw } from 'lucide-react-native';
+import { ArrowLeft, Plane, MapPin, Power, RefreshCcw, Ship } from 'lucide-react-native';
 import { COLORS, RADIUS, SPACING } from '../theme/theme';
 import { Typography } from '../components/Typography';
 import { useTrackingStore, selectDeal } from '../store/tracking.store';
@@ -20,6 +20,7 @@ import { useGPSTracking } from '../hooks/useGPSTracking';
 import { useMapInterpolation } from '../hooks/useMapInterpolation';
 import { GPSMapView } from '../components/tracking/GPSMapView';
 import { FlightMapView } from '../components/tracking/FlightMapView';
+import { BoatMapView } from '../components/tracking/BoatMapView';
 import { TrackingModeSheet } from '../components/tracking/TrackingModeSheet';
 import { SmartSwitchAlert } from '../components/tracking/SmartSwitchAlert';
 import { trackingApi } from '../services/tracking/trackingApi';
@@ -100,11 +101,14 @@ export const LiveTrackingScreen: React.FC<LiveTrackingScreenProps> = ({
   const toCity: string | undefined = deal?.toCity ?? undefined;
   const travelerAvatar: string | null = deal?.traveler?.profilePhoto ?? deal?.traveler?.avatar ?? null;
 
-  const handleActivate = async (mode: 'gps' | 'flight', callsign?: string) => {
+  const handleActivate = async (
+    mode: 'gps' | 'flight' | 'boat',
+    opts: { callsign?: string; mmsi?: number },
+  ) => {
     if (busy) return;
     setBusy(true);
     try {
-      const res = await trackingApi.activate(dealId, mode, callsign);
+      const res = await trackingApi.activate(dealId, mode, opts);
       if (res.success) {
         setShowModeSheet(false);
         if (res.data?.session) {
@@ -149,7 +153,7 @@ export const LiveTrackingScreen: React.FC<LiveTrackingScreenProps> = ({
     }
     setBusy(true);
     try {
-      await trackingApi.switchMode(dealId, 'flight', callsign);
+      await trackingApi.switchMode(dealId, 'flight', { callsign });
       dismissSmartSwitch(dealId);
     } catch (e: any) {
       Alert.alert('Could not switch mode', e?.message ?? 'Please try again.');
@@ -174,6 +178,13 @@ export const LiveTrackingScreen: React.FC<LiveTrackingScreenProps> = ({
           dealId={dealId}
           origin={origin ? { ...origin, iata: fromIata, city: fromCity } : null}
           destination={destination ? { ...destination, iata: toIata, city: toCity } : null}
+          style={{ ...StyleSheet.absoluteFillObject }}
+        />
+      ) : state.mode === 'boat' ? (
+        <BoatMapView
+          dealId={dealId}
+          origin={origin ? { ...origin, code: fromIata, city: fromCity } : null}
+          destination={destination ? { ...destination, code: toIata, city: toCity } : null}
           style={{ ...StyleSheet.absoluteFillObject }}
         />
       ) : (
@@ -262,6 +273,8 @@ export const LiveTrackingScreen: React.FC<LiveTrackingScreenProps> = ({
             <View style={styles.footerCard}>
               {state.mode === 'flight' ? (
                 <Plane size={18} color={COLORS.info} />
+              ) : state.mode === 'boat' ? (
+                <Ship size={18} color="#22d3ee" />
               ) : (
                 <MapPin size={18} color={COLORS.success} />
               )}
@@ -276,8 +289,9 @@ export const LiveTrackingScreen: React.FC<LiveTrackingScreenProps> = ({
       <TrackingModeSheet
         visible={showModeSheet}
         onClose={() => setShowModeSheet(false)}
-        defaultMode={state.mode === 'flight' ? 'flight' : 'gps'}
+        defaultMode={state.mode === 'flight' ? 'flight' : state.mode === 'boat' ? 'boat' : 'gps'}
         defaultCallsign={state.flight.callsign ?? ''}
+        defaultMmsi={state.boat.mmsi != null ? String(state.boat.mmsi) : ''}
         loading={busy}
         onActivate={handleActivate}
       />
@@ -292,15 +306,17 @@ export const LiveTrackingScreen: React.FC<LiveTrackingScreenProps> = ({
   );
 };
 
-function pillColor(mode: 'idle' | 'gps' | 'flight'): string {
+function pillColor(mode: 'idle' | 'gps' | 'flight' | 'boat'): string {
   if (mode === 'gps') return COLORS.success;
   if (mode === 'flight') return COLORS.info;
+  if (mode === 'boat') return '#22d3ee';
   return 'rgba(15,23,42,0.6)';
 }
 
-function pillLabel(mode: 'idle' | 'gps' | 'flight'): string {
+function pillLabel(mode: 'idle' | 'gps' | 'flight' | 'boat'): string {
   if (mode === 'gps') return 'LIVE';
   if (mode === 'flight') return 'IN AIR';
+  if (mode === 'boat') return 'AT SEA';
   return 'IDLE';
 }
 
@@ -310,6 +326,13 @@ function statusLine(state: ReturnType<ReturnType<typeof selectDeal>>): string {
     if (!p) return 'Awaiting flight data…';
     if (p.onGround) return `${p.callsign} is on the ground`;
     return `${p.callsign}  ·  ${p.velocityKmh} km/h  ·  ${Math.round(p.altitudeM)}m`;
+  }
+  if (state.mode === 'boat') {
+    const p = state.boat.currentPosition;
+    if (!p) return 'Awaiting AIS data…';
+    const speed = p.sogKnots != null ? `${p.sogKnots.toFixed(1)} kn` : '— kn';
+    const heading = p.cogDeg != null ? ` · ${Math.round(p.cogDeg)}°` : '';
+    return `${p.name ?? `MMSI ${p.mmsi}`}  ·  ${speed}${heading}`;
   }
   if (state.mode === 'gps') {
     const p = state.gps.currentPosition ?? state.gps.lastKnownPosition;

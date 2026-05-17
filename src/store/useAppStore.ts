@@ -74,6 +74,11 @@ interface AppStore {
   // --- Deals ---
   deals: Deal[];
   activeDeal: Deal | null;
+  // Packages where the current user's phone matches deal.receiverPhone.
+  // Populated by fetchReceivedPackages(); kept separate from `deals` so the
+  // sender-oriented Home tab logic stays unchanged.
+  receivedPackages: Deal[];
+  receivedPackagesLoading: boolean;
 
   // --- Trips (traveler posts) ---
   trips: any[];
@@ -170,6 +175,7 @@ interface AppStore {
   // --- Async Fetch Actions ---
   fetchDeals: (page?: number, append?: boolean) => Promise<void>;
   fetchTrips: (page?: number, append?: boolean) => Promise<void>;
+  fetchReceivedPackages: () => Promise<void>;
   fetchTransactions: () => Promise<void>;
   fetchConversations: () => Promise<void>;
   fetchWalletBalance: () => Promise<void>;
@@ -226,6 +232,8 @@ export const useAppStore = create<AppStore>()(
   activeDeal: null,
   dealsPage: 1,
   dealsHasMore: false,
+  receivedPackages: [],
+  receivedPackagesLoading: false,
 
   // Trips
   trips: [],
@@ -270,6 +278,8 @@ export const useAppStore = create<AppStore>()(
       activeDeal: null,
       dealsPage: 1,
       dealsHasMore: true,
+      receivedPackages: [],
+      receivedPackagesLoading: false,
       // Trips
       trips: [],
       tripsPage: 1,
@@ -479,6 +489,16 @@ export const useAppStore = create<AppStore>()(
       }));
     } catch (e: any) {
       set({ isLoading: false, error: e?.message || 'Failed to load deals' });
+    }
+  },
+
+  fetchReceivedPackages: async () => {
+    set({ receivedPackagesLoading: true });
+    try {
+      const result = await dealsAPI.getReceivedPackages({ page: 1, limit: 50 });
+      set({ receivedPackages: (result.items || []) as Deal[], receivedPackagesLoading: false });
+    } catch {
+      set({ receivedPackagesLoading: false });
     }
   },
 

@@ -100,6 +100,8 @@ model User {
   blocksReceived UserBlock[]       @relation("BlockedUser")
   reportsFiled   UserReport[]      @relation("ReporterUser")
   reportsAgainst UserReport[]      @relation("ReportedUser")
+  dealRequests   DealRequest[]     @relation("DealRequestRequester")
+  tripRequests   TripRequest[]     @relation("TripRequestRequester")
 
   @@index([kycStatus])
   @@index([faceVerificationStatus])
@@ -183,6 +185,7 @@ model Deal {
   customsDeclarations CustomsDeclaration[]
   trackingSession TrackingSession?
   positionLogs    PositionLog[]
+  requests        DealRequest[]
 
   @@index([status])
   @@index([fromCity, toCity])
@@ -198,7 +201,7 @@ model TrackingSession {
   id              String   @id @default(cuid())
   dealId          String   @unique
   deal            Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
-  mode            String   @default("idle") // idle | gps | flight
+  mode            String   @default("idle") // idle | gps | flight | boat
 
   // GPS state
   gpsActive       Boolean  @default(false)
@@ -226,12 +229,33 @@ model TrackingSession {
   flightUpdatedAt    DateTime?
   flightLastPollAt   DateTime?
 
+  // Boat (AIS) state
+  boatActive         Boolean  @default(false)
+  boatMmsi           BigInt?
+  boatImo            BigInt?
+  boatName           String?
+  boatCallsign       String?
+  boatLat            Float?
+  boatLng            Float?
+  boatCogDeg         Float?
+  boatSogKnots       Float?
+  boatHeadingDeg     Float?
+  boatNavStatus      Int?
+  boatType           Int?
+  boatDraughtM       Float?
+  boatDestination    String?
+  boatEta            String?
+  boatStale          Boolean?
+  boatUpdatedAt      DateTime?
+  boatLastPollAt     DateTime?
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   @@index([mode])
   @@index([gpsActive])
   @@index([flightActive])
+  @@index([boatActive])
 }
 
 // Append-only history of positions for route replay.
@@ -239,13 +263,13 @@ model PositionLog {
   id          BigInt   @id @default(autoincrement())
   dealId      String
   deal        Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
-  mode        String   // gps | flight
+  mode        String   // gps | flight | boat
   lat         Float
   lng         Float
   altitudeM   Float?
   headingDeg  Float?
   speedMs     Float?
-  source      String?  // device | opensky | interpolated
+  source      String?  // device | opensky | aishub | interpolated
   loggedAt    DateTime @default(now())
 
   @@index([dealId, loggedAt])
@@ -290,9 +314,14 @@ model ChatRoom {
   deal      Deal?             @relation(fields: [dealId], references: [id], onDelete: Cascade)
   tripId    String?           @unique
   trip      Trip?             @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  // Group chats are not unique-bound to a deal — the deal reference is informational.
+  isGroup     Boolean         @default(false)
+  groupDealId String?
   participants ChatParticipant[]
   messages  ChatMessage[]
   createdAt DateTime          @default(now())
+
+  @@index([groupDealId])
 }
 
 model ChatParticipant {
@@ -370,11 +399,64 @@ model Trip {
 
   // Chat room opened for this trip posting (sender messages traveler before matching)
   chatRoom      ChatRoom?
+  requests      TripRequest[]
 
   @@index([travelerId])
   @@index([fromCity, toCity])
   @@index([status])
   @@index([departureDate])
+}
+
+// Request to take a Deal (sent by a Traveler, approved by the Sender).
+// The Deal stays OPEN until one request is ACCEPTED — at that point the
+// deal becomes MATCHED, escrow is held, and sibling PENDING requests are
+// auto-REJECTED.
+model DealRequest {
+  id            String    @id @default(cuid())
+  dealId        String
+  deal          Deal      @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  requesterId   String
+  requester     User      @relation("DealRequestRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  proposedPrice Float
+  message       String?
+  status        String    @default("PENDING") // PENDING | ACCEPTED | REJECTED | WITHDRAWN
+  createdAt     DateTime  @default(now())
+  decidedAt     DateTime?
+
+  @@unique([dealId, requesterId])
+  @@index([dealId, status])
+  @@index([requesterId, status])
+}
+
+// Request to take a Trip (sent by a Sender, approved by the Traveler).
+// Mirror of DealRequest. When ACCEPTED, the Trip becomes MATCHED, the
+// matched Deal is created and escrow is held.
+model TripRequest {
+  id            String    @id @default(cuid())
+  tripId        String
+  trip          Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  requesterId   String
+  requester     User      @relation("TripRequestRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  proposedPrice Float
+  message       String?
+  // Sender supplies package details when requesting a trip, persisted so
+  // the traveler sees what they would be carrying and so accept can hydrate
+  // the Deal in a single step.
+  title         String?
+  description   String?
+  packageSize   String?   // SMALL | MEDIUM | LARGE | EXTRA_LARGE
+  weight        Float?
+  itemValue     Float?
+  isFragile     Boolean   @default(false)
+  receiverName  String?
+  receiverPhone String?
+  status        String    @default("PENDING") // PENDING | ACCEPTED | REJECTED | WITHDRAWN
+  createdAt     DateTime  @default(now())
+  decidedAt     DateTime?
+
+  @@unique([tripId, requesterId])
+  @@index([tripId, status])
+  @@index([requesterId, status])
 }
 
 model Dispute {

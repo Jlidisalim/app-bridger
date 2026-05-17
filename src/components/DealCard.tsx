@@ -32,7 +32,7 @@ const DealCardComponent: React.FC<DealCardProps> = ({ deal, onPress }) => {
       case 'arrived': return '#5856D6';
       case 'completed': return '#34C759';
       case 'cancelled': return '#FF3B30';
-      case 'disputed': return '#FF3B30';
+      case 'disputed': return '#64748b';
       default: return '#8E8E93';
     }
   };

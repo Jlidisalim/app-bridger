@@ -292,15 +292,42 @@ export const pushNotificationService = {
   } | null => {
     const type = data.type as string;
     const dealId = data.dealId as string;
+    const tripId = data.tripId as string;
     const conversationId = data.conversationId as string;
 
     switch (type) {
       case 'deal_accepted':
       case 'deal_cancelled':
       case 'delivery_reminder':
+      case 'deal_matched':
+      case 'deal_request_accepted':
+      case 'trip_request_accepted':
         return {
           screen: 'DealDetails',
           params: { dealId },
+        };
+
+      // Owner taps the "new request" push → land on the requests inbox so they
+      // can accept or reject without an extra navigation step.
+      case 'deal_request_received':
+      case 'deal_request_withdrawn':
+        return {
+          screen: 'DealRequests',
+          params: { dealId },
+        };
+      case 'trip_request_received':
+      case 'trip_request_withdrawn':
+        return {
+          screen: 'TripRequests',
+          params: { tripId },
+        };
+
+      // Rejected travelers/senders land on Explore so they can pick another listing.
+      case 'deal_request_rejected':
+      case 'trip_request_rejected':
+        return {
+          screen: 'MainTabs',
+          params: { screen: 'ExploreTab' },
         };
 
       case 'new_message':
